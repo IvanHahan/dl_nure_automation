@@ -9,8 +9,11 @@ import httpx
 import requests
 from loguru import logger
 from py_moodle.course import MoodleCourseError, get_course
+from py_moodle.transport import TransportError
+from py_moodle.transport.ajax import call as call_ajax
 
 _SESSKEY_RE = re.compile(r'"sesskey"\s*:\s*"([^"]+)"')
+_ASSIGNMENT_INSTANCE_RE = re.compile(r'\bdata-assignmentid="([0-9]+)"')
 
 
 class MoodleClient:
@@ -59,14 +62,47 @@ class MoodleClient:
         if sesskey is None:
             return []
 
-        with requests.Session() as session:
-            session.cookies = self._client.cookies.jar
-            session.request = partial(session.request, timeout=self._timeout)
+        with self._requests_session() as session:
             try:
                 return get_course(session, self.base_url, sesskey[1], course_id)
             except (MoodleCourseError, requests.RequestException, ValueError):
                 logger.debug("Course API unavailable for course {}", course_id)
                 return []
+
+    def get_assignment_participants(self, module_id: str) -> list[dict[str, Any]]:
+        try:
+            html = self.get_text(f"/mod/assign/view.php?id={module_id}&action=grader")
+            sesskey = _SESSKEY_RE.search(html)
+            assignment = _ASSIGNMENT_INSTANCE_RE.search(html)
+            if sesskey is None or assignment is None:
+                return []
+            with self._requests_session() as session:
+                participants = call_ajax(
+                    session,
+                    self.base_url,
+                    "mod_assign_list_participants",
+                    sesskey[1],
+                    {
+                        "assignid": int(assignment[1]),
+                        "groupid": 0,
+                        "filter": "",
+                        "includeenrolments": False,
+                    },
+                )
+        except (httpx.HTTPError, TransportError, requests.RequestException):
+            logger.debug("Participant API unavailable for module {}", module_id)
+            return []
+        if not isinstance(participants, list) or not all(
+            isinstance(row, dict) for row in participants
+        ):
+            return []
+        return participants
+
+    def _requests_session(self) -> requests.Session:
+        session = requests.Session()
+        session.cookies = self._client.cookies.jar
+        session.request = partial(session.request, timeout=self._timeout)
+        return session
 
     def post_form(
         self,

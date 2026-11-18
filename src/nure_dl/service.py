@@ -1,19 +1,12 @@
 from __future__ import annotations
 
 import re
-from dataclasses import replace
 from pathlib import Path
 
 from loguru import logger
 
 from nure_dl.client import MoodleClient
-from nure_dl.course import (
-    labs_from_course_sections,
-    parse_course_fullname,
-    parse_course_shortname_from_assign,
-    parse_lab_assignments,
-    resolve_course_name,
-)
+from nure_dl.course import discover_labs, resolve_course_name
 from nure_dl.grading import grading_url, has_next_page, parse_ungraded_files
 from nure_dl.index import register_submission
 from nure_dl.models import LabAssignment, SubmissionFile
@@ -35,18 +28,8 @@ def list_labs(
     settings: Settings,
     course_id: int,
 ) -> list[LabAssignment]:
-    html = client.get_text(f"/course/view.php?id={course_id}")
-    fullname = parse_course_fullname(html)
-    # Shortname distinguishes streams that share a similar full name on DL
-    shortname = None
-    preview = labs_from_course_sections(
-        client.get_course_sections(course_id, html), course_id
-    ) or parse_lab_assignments(html, settings.base_url, course_id, "")
-    if preview:
-        assign_html = client.get_text(f"/mod/assign/view.php?id={preview[0].assign_id}")
-        shortname = parse_course_shortname_from_assign(assign_html)
+    labs, fullname, shortname = discover_labs(client, course_id)
     course_name = resolve_course_name(fullname, shortname, course_id)
-    labs = [replace(lab, course_name=course_name) for lab in preview]
     logger.info(
         "Found {} lab assignments on «{}» (id={})",
         len(labs),
