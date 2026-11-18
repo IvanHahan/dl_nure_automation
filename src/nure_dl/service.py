@@ -13,6 +13,7 @@ from nure_dl.course import (
     resolve_course_name,
 )
 from nure_dl.grading import grading_url, has_next_page, parse_ungraded_files
+from nure_dl.index import register_submission
 from nure_dl.models import LabAssignment, SubmissionFile
 from nure_dl.settings import Settings
 
@@ -108,12 +109,14 @@ def download_ungraded(
                         logger.info("DRY-RUN {}", dest)
                         downloaded += 1
                         continue
-                    if dest.exists() and dest.stat().st_size > 0:
+                    if not (dest.exists() and dest.stat().st_size > 0):
+                        client.download(item.url, dest)
+                        logger.info("Downloaded {}", dest)
+                        downloaded += 1
+                    else:
                         logger.debug("Skip existing {}", dest)
-                        continue
-                    client.download(item.url, dest)
-                    logger.info("Downloaded {}", dest)
-                    downloaded += 1
+                    rec = register_submission(settings.output_dir, lab, item, dest)
+                    logger.info("Indexed {} → {}", rec.id, dest)
     return downloaded
 
 

@@ -18,3 +18,5 @@ class SubmissionFile:
     student_email: str
     filename: str
     url: str
+    moodle_user_id: str | None = None
+    moodle_file_id: str | None = None

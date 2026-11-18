@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
+from nure_dl.index import moodle_file_id_from_url
 from nure_dl.models import SubmissionFile
 
 
@@ -25,6 +27,7 @@ def parse_ungraded_files(html: str, base_url: str) -> list[SubmissionFile]:
         if not tr.select("td"):
             continue
         name = _student_name(tr)
+        user_id = _moodle_user_id(tr)
         email_el = tr.select_one("td.email")
         email = email_el.get_text(" ", strip=True) if email_el else ""
         for anchor in tr.select('a[href*="pluginfile.php"]'):
@@ -41,6 +44,8 @@ def parse_ungraded_files(html: str, base_url: str) -> list[SubmissionFile]:
                     student_email=email,
                     filename=filename,
                     url=url,
+                    moodle_user_id=user_id,
+                    moodle_file_id=moodle_file_id_from_url(url),
                 )
             )
     return results
@@ -82,6 +87,17 @@ def _student_name(tr) -> str:
         if text:
             return text
     return cell.get_text(" ", strip=True)
+
+
+def _moodle_user_id(tr) -> str | None:
+    cell = tr.select_one("td.username")
+    if cell is None:
+        return None
+    for anchor in cell.select('a[href*="/user/view.php"]'):
+        match = re.search(r"[?&]id=(\d+)", anchor.get("href", ""))
+        if match:
+            return match.group(1)
+    return None
 
 
 def _filename_from_url(url: str) -> str:

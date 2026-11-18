@@ -15,30 +15,39 @@ cp .env.example .env
 ## Download ungraded lab submissions
 
 Courses come from `MOODLE_COURSE_IDS` (default both streams: `32388,32389`).
-Folders use the Moodle **course shortname** from DL (not the numeric id):
-
-```text
-downloads/
-  АПОТ:БАК:КІУКІ(и,у):ТПК:о26_27/   ← shortname ( / → _ )
-    КІУКІ-23-1/
-      Лабораторна робота 1/
-        Student Name/
-          file.pdf
-  АПОТ:БАК:КІУКІ(у):ТПК:о26_27/
-    КІУКІ-24-1/
-      …
-```
+Folders use the Moodle **course shortname** from DL (not the numeric id).
 
 ```bash
-# Preview
-python -m nure_dl --dry-run
-
-# Both courses from .env
-python -m nure_dl
-
-# One course or group
-python -m nure_dl --course-id 32389
-python -m nure_dl --group КІУКІ-23-1
+python -m nure_dl download --dry-run
+python -m nure_dl download
+python -m nure_dl download --course-id 32389
+python -m nure_dl download --group КІУКІ-23-1
 ```
 
-Requires a teaching/grading role on the assignment (Submissions table access).
+Each download is registered in `downloads/submissions.json` with a stable id
+(`sf-<moodle-file-id>` when available). Later grading uses that id — no DL search:
+
+```bash
+python -m nure_dl submissions
+python -m nure_dl submissions sf-3032631
+```
+
+## Grade any lab (by submission id)
+
+Lab-agnostic — resolves the cached file and dumps it for evaluation (no Lab-1-specific logic):
+
+```bash
+python -m nure_dl grade local-25-1-1-x-25-1-1-docx
+# Submit Moodle gradebook score (+ optional submission comment)
+python -m nure_dl grade local-25-1-1-x-25-1-1-docx -s 70 -c "T1/T3 OK; T2 missing dataflow"
+python -m nure_dl grade local-25-1-1-x-25-1-1-docx --score 70 --comment-file notes.txt
+```
+
+Agent evaluation: skill `.cursor/skills/nure-lab-evaluate/` + rules in `guidelines/<subject>/labs/` (e.g. `guidelines/tpks/labs/`).
+`--score` writes the numeric grade on DL; `--comment` / `--comment-file` posts to submission comments.
+
+## Dump a report for reading
+
+```bash
+python -m nure_dl dump path/to/report.docx -o /tmp/report-dump
+```
