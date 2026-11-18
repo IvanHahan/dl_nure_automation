@@ -1,0 +1,23 @@
+[project]
+name = "nure-dl"
+version = "0.1.0"
+description = "Personal helpers for ХНУРЕ DL (Moodle) — download ungraded submissions"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12",
+  "httpx>=0.27",
+  "loguru>=0.7",
+  "lxml>=5.0",
+  "python-dotenv>=1.0",
+]
+
+[project.scripts]
+nure-dl = "nure_dl.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
