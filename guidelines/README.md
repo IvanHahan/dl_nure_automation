@@ -6,7 +6,7 @@ Grouped by subject. The `nure-lab-evaluate` skill picks the subject folder, then
 |--------|---------|
 | `tpks/` | Технології проектування комп'ютерних систем |
 
-Layout per lab: `guidelines/<subject>/labs/lab-N/guidelines.md` plus `held/<group>.json` for the session date (from `local/schedule/`, before evaluation).
+Layout per lab: `guidelines/<subject>/labs/lab-N/guidelines.md`. Session dates live in gitignored `held/<group>.json` (from `held-date` / `local/schedule/`).
 
 ## Lateness cap (all subjects)
 

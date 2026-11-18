@@ -5,7 +5,7 @@ Evaluation guidelines for this subject. Each lab is a folder:
 ```
 labs/lab-N/
   guidelines.md     # how to judge + grading scale
-  held/<group>.json # when that group's N-th ТПКС lab session was held
+  held/<group>.json # local cache only (gitignored) — from held-date
 ```
 
 | Folder | Lab |
