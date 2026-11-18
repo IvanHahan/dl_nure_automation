@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from bs4 import BeautifulSoup
 
@@ -8,7 +9,7 @@ from nure_dl.models import LabAssignment
 
 # Themes use "Лабораторні роботи КІУКІ-23-1" or "Лабораторні роботи: КІУКІ-24-1"
 _LAB_SECTION_RE = re.compile(r"^Лабораторні роботи[:\s]+(.+)$")
-_ASSIGN_NAME_RE = re.compile(r"\s+Assignment$", re.I)
+_ASSIGN_NAME_RE = re.compile(r"\s+Assignment$", re.IGNORECASE)
 # Moodle assign titles: "{shortname}: {activity} | Site"
 _ASSIGN_PAGE_TITLE_RE = re.compile(
     r"^(?P<shortname>.+?):\s+(?P<activity>.+?)(?:\s*\|\s*.+)?$"
@@ -29,7 +30,7 @@ def parse_course_fullname(course_html: str) -> str | None:
                 return text
     if soup.title:
         title = soup.title.get_text(strip=True)
-        title = re.sub(r"^Course:\s*", "", title, flags=re.I)
+        title = re.sub(r"^Course:\s*", "", title, flags=re.IGNORECASE)
         title = re.split(r"\s*\|\s*", title, maxsplit=1)[0].strip()
         return title or None
     return None
@@ -105,6 +106,30 @@ def parse_lab_assignments(
     return _parse_lab_assignments_linear(course_html, base_url, course_id, course_name)
 
 
+def labs_from_course_sections(
+    sections: list[dict[str, Any]], course_id: int
+) -> list[LabAssignment]:
+    labs: list[LabAssignment] = []
+    for section in sections:
+        title = section.get("title") or section.get("name") or ""
+        match = _LAB_SECTION_RE.match(" ".join(title.split()))
+        if match is None:
+            continue
+        for module in section.get("modules", []):
+            if (module.get("module") or module.get("modname")) != "assign":
+                continue
+            labs.append(
+                LabAssignment(
+                    course_id=course_id,
+                    course_name="",
+                    group=match[1].strip(),
+                    assign_id=str(module["id"]),
+                    title=_ASSIGN_NAME_RE.sub("", module["name"]).strip(),
+                )
+            )
+    return _dedupe(labs)
+
+
 def _dedupe(labs: list[LabAssignment]) -> list[LabAssignment]:
     seen: set[str] = set()
     out: list[LabAssignment] = []
@@ -128,7 +153,7 @@ def _parse_lab_assignments_linear(
         + re.escape(base_url)
         + r')?/mod/assign/view\.php\?id=(\d+)"[^>]*>\s*'
         r'<span class="instancename">(.*?)</span>',
-        re.I | re.S,
+        re.IGNORECASE | re.DOTALL,
     )
     labs: list[LabAssignment] = []
     current_group: str | None = None

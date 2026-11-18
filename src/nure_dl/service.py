@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 from loguru import logger
 
 from nure_dl.client import MoodleClient
 from nure_dl.course import (
+    labs_from_course_sections,
     parse_course_fullname,
     parse_course_shortname_from_assign,
     parse_lab_assignments,
@@ -37,12 +39,14 @@ def list_labs(
     fullname = parse_course_fullname(html)
     # Shortname distinguishes streams that share a similar full name on DL
     shortname = None
-    preview = parse_lab_assignments(html, settings.base_url, course_id, "pending")
+    preview = labs_from_course_sections(
+        client.get_course_sections(course_id, html), course_id
+    ) or parse_lab_assignments(html, settings.base_url, course_id, "")
     if preview:
         assign_html = client.get_text(f"/mod/assign/view.php?id={preview[0].assign_id}")
         shortname = parse_course_shortname_from_assign(assign_html)
     course_name = resolve_course_name(fullname, shortname, course_id)
-    labs = parse_lab_assignments(html, settings.base_url, course_id, course_name)
+    labs = [replace(lab, course_name=course_name) for lab in preview]
     logger.info(
         "Found {} lab assignments on «{}» (id={})",
         len(labs),

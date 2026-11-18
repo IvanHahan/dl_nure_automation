@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import re
+from functools import partial
 from pathlib import Path
+from typing import Any, Self
 
 import httpx
+import requests
 from loguru import logger
+from py_moodle.course import MoodleCourseError, get_course
+
+_SESSKEY_RE = re.compile(r'"sesskey"\s*:\s*"([^"]+)"')
 
 
 class MoodleClient:
     def __init__(self, base_url: str, session: str, timeout: float = 60.0) -> None:
         self.base_url = base_url.rstrip("/")
+        self._timeout = timeout
         # Cookie jar (not a static Cookie header) so Moodle can rotate MoodleSession
         # after POSTs (e.g. save grade) without kicking us to login.
         self._client = httpx.Client(
@@ -29,7 +37,7 @@ class MoodleClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> MoodleClient:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -43,6 +51,22 @@ class MoodleClient:
                 "Redirected to login — MoodleSession expired. Refresh .env from DevTools."
             )
         return response.text
+
+    def get_course_sections(
+        self, course_id: int, course_html: str
+    ) -> list[dict[str, Any]]:
+        sesskey = _SESSKEY_RE.search(course_html)
+        if sesskey is None:
+            return []
+
+        with requests.Session() as session:
+            session.cookies = self._client.cookies.jar
+            session.request = partial(session.request, timeout=self._timeout)
+            try:
+                return get_course(session, self.base_url, sesskey[1], course_id)
+            except (MoodleCourseError, requests.RequestException, ValueError):
+                logger.debug("Course API unavailable for course {}", course_id)
+                return []
 
     def post_form(
         self,
