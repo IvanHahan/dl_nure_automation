@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any
 
 from bs4 import BeautifulSoup
 
+from nure_dl.client import MoodleClient
 from nure_dl.models import LabAssignment
 
 # Themes use "Лабораторні роботи КІУКІ-23-1" or "Лабораторні роботи: КІУКІ-24-1"
@@ -14,6 +16,23 @@ _ASSIGN_NAME_RE = re.compile(r"\s+Assignment$", re.IGNORECASE)
 _ASSIGN_PAGE_TITLE_RE = re.compile(
     r"^(?P<shortname>.+?):\s+(?P<activity>.+?)(?:\s*\|\s*.+)?$"
 )
+
+
+def discover_labs(
+    client: MoodleClient, course_id: int
+) -> tuple[list[LabAssignment], str | None, str | None]:
+    """Return labs and the full and short course names used for matching."""
+    html = client.get_text(f"/course/view.php?id={course_id}")
+    fullname = parse_course_fullname(html)
+    labs = labs_from_course_sections(
+        client.get_course_sections(course_id, html), course_id
+    ) or parse_lab_assignments(html, client.base_url, course_id, "")
+    shortname = None
+    if labs:
+        assign_html = client.get_text(f"/mod/assign/view.php?id={labs[0].assign_id}")
+        shortname = parse_course_shortname_from_assign(assign_html)
+    course_name = resolve_course_name(fullname, shortname, course_id)
+    return [replace(lab, course_name=course_name) for lab in labs], fullname, shortname
 
 
 def parse_course_fullname(course_html: str) -> str | None:

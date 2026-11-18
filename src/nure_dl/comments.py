@@ -11,12 +11,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 
 from nure_dl.client import MoodleClient
-from nure_dl.course import (
-    parse_course_fullname,
-    parse_course_shortname_from_assign,
-    parse_lab_assignments,
-    resolve_course_name,
-)
+from nure_dl.course import discover_labs
 from nure_dl.index import SubmissionRecord, load_index, save_index
 from nure_dl.models import LabAssignment
 from nure_dl.settings import Settings
@@ -149,7 +144,11 @@ def resolve_assign_and_user(
         )
     needle = _norm_name(rec.student_name)
     for lab in labs:
-        user_id = _find_user_on_grading(client, settings, lab, needle, rec.student_email)
+        user_id = _find_participant_id(client, lab, needle, rec.student_email)
+        if user_id is None:
+            user_id = _find_user_on_grading(
+                client, settings, lab, needle, rec.student_email
+            )
         if user_id:
             return lab.assign_id, user_id
     raise SystemExit(
@@ -169,17 +168,7 @@ def _find_matching_labs(
     by_group_title: list[LabAssignment] = []
     preferred: list[LabAssignment] = []
     for course_id in settings.course_ids:
-        html = client.get_text(f"/course/view.php?id={course_id}")
-        fullname = parse_course_fullname(html)
-        shortname = None
-        preview = parse_lab_assignments(html, settings.base_url, course_id, "pending")
-        if preview:
-            assign_html = client.get_text(
-                f"/mod/assign/view.php?id={preview[0].assign_id}"
-            )
-            shortname = parse_course_shortname_from_assign(assign_html)
-        course_name = resolve_course_name(fullname, shortname, course_id)
-        labs = parse_lab_assignments(html, settings.base_url, course_id, course_name)
+        labs, fullname, shortname = discover_labs(client, course_id)
         for lab in labs:
             if group_n and _norm_name(lab.group) != group_n:
                 continue
@@ -188,16 +177,43 @@ def _find_matching_labs(
             by_group_title.append(lab)
             course_keys = {
                 _norm_name(lab.course_name),
-                _norm_name(course_name),
                 _norm_name(fullname or ""),
                 _norm_name(shortname or ""),
                 str(course_id),
             }
-            if not course_n or course_n in course_keys or any(
-                course_n in key for key in course_keys if key
+            if (
+                not course_n
+                or course_n in course_keys
+                or any(course_n in key for key in course_keys if key)
             ):
                 preferred.append(lab)
     return preferred or by_group_title
+
+
+def _find_participant_id(
+    client: MoodleClient,
+    lab: LabAssignment,
+    student_name_n: str,
+    student_email: str,
+) -> str | None:
+    email_n = (student_email or "").casefold().strip()
+    matches: set[str] = set()
+    for participant in client.get_assignment_participants(lab.assign_id):
+        user_id = str(participant.get("id"))
+        if not user_id.isdecimal() or int(user_id) == 0:
+            continue
+        if email_n:
+            matches_email = (
+                participant.get("email") or ""
+            ).casefold().strip() == email_n
+            if matches_email:
+                matches.add(user_id)
+        elif (
+            student_name_n
+            and _norm_name(participant.get("fullname") or "") == student_name_n
+        ):
+            matches.add(user_id)
+    return next(iter(matches)) if len(matches) == 1 else None
 
 
 def _find_user_on_grading(
@@ -216,7 +232,9 @@ def _find_user_on_grading(
         )
         html = client.get_text(url)
         soup = BeautifulSoup(html, "lxml")
-        table = soup.select_one("table.generaltable") or soup.select_one("table.flexible")
+        table = soup.select_one("table.generaltable") or soup.select_one(
+            "table.flexible"
+        )
         if table is None:
             return None
         for tr in table.select("tr"):
@@ -251,7 +269,9 @@ def _persist_moodle_ids(
     rec.assign_id = assign_id
     rec.moodle_user_id = user_id
     save_index(output_dir, records)
-    logger.info("Updated index {} with assign={} user={}", submission_id, assign_id, user_id)
+    logger.info(
+        "Updated index {} with assign={} user={}", submission_id, assign_id, user_id
+    )
 
 
 def _row_user_id(tr) -> str | None:
