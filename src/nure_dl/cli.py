@@ -8,7 +8,11 @@ from pathlib import Path
 
 from loguru import logger
 
-from nure_dl.clean import clean_graded_submissions, clean_result_as_dict
+from nure_dl.clean import (
+    clean_graded_submissions,
+    clean_result_as_dict,
+    purge_local_submission,
+)
 from nure_dl.comments import post_submission_comment
 from nure_dl.dump import dump_report
 from nure_dl.grade import prepare_grade, print_prep, save_grade_result
@@ -185,6 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Read Moodle submission comment text from a file (UTF-8)",
+    )
+    grade.add_argument(
+        "--keep-local",
+        action="store_true",
+        help="With --score, keep the local file and dump (default: delete after grading)",
     )
 
     sched = sub.add_parser(
@@ -417,6 +426,7 @@ def _cmd_grade(args: argparse.Namespace) -> None:
             score=payload.get("score", args.score),
         )
         logger.info("Saved grade → {}", path)
+    scored = False
     if args.score is not None:
         stored = submit_assignment_grade(
             settings,
@@ -426,6 +436,7 @@ def _cmd_grade(args: argparse.Namespace) -> None:
             notify_student=args.notify,
         )
         print(f"moodle_grade: {stored}")
+        scored = True
     comment = _grade_comment_text(args)
     if comment is not None:
         posted = post_submission_comment(
@@ -435,6 +446,12 @@ def _cmd_grade(args: argparse.Namespace) -> None:
             output_dir=root,
         )
         print(f"moodle_comment_id: {posted['id']}")
+    if (
+        scored
+        and not args.keep_local
+        and purge_local_submission(root, args.submission_id)
+    ):
+        print(f"local_purged: {args.submission_id}")
 
 
 def _grade_comment_text(args: argparse.Namespace) -> str | None:

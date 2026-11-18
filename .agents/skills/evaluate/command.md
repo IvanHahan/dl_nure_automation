@@ -64,7 +64,7 @@ For each id, follow **`nure-lab-evaluate`** end-to-end:
 2. Schedule / `held-date` — if the group is off-schedule or held-date is missing → **skip** (`skipped not on schedule`); do not ask the user.
 3. Dump / prepare via `grade SUBMISSION_ID`.
 4. Load `guidelines/<subject>/labs/lab-N/guidelines.md` — stop if missing.
-5. Judge tasks → task score → `grade-cap` → submit Moodle `--score` (+ `-c` when anything incorrect).
+5. Judge tasks → task score → `grade-cap` → submit Moodle `--score` (+ `-c` when anything incorrect). Successful `--score` auto-purges the local file + dump (`local_purged`); do not pass `--keep-local` in normal batches.
 
 Do not stop the whole batch on one failure or one off-schedule group: record the skip/error, continue, report at the end.
 

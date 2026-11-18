@@ -94,6 +94,33 @@ def clean_result_as_dict(result: CleanResult) -> dict:
     return asdict(result)
 
 
+def purge_local_submission(
+    output_dir: Path,
+    submission_id: str,
+    *,
+    drop_grades_entry: bool = False,
+) -> bool:
+    """Delete the local file + grade dump for one indexed submission.
+
+    Removes the id from ``submissions.json`` and prunes empty parent dirs.
+    Keeps ``grades.json`` unless ``drop_grades_entry`` is true.
+    """
+    root = output_dir.resolve()
+    records = load_index(root)
+    rec = records.get(submission_id)
+    if rec is None:
+        logger.warning("Cannot purge unknown submission id {}", submission_id)
+        return False
+    _remove_local(root, rec)
+    records.pop(submission_id, None)
+    save_index(root, records)
+    if drop_grades_entry:
+        _drop_grades_entry(root, submission_id)
+    _prune_empty_dirs(root)
+    logger.info("Purged local files for {}", submission_id)
+    return True
+
+
 def _matches_filters(
     rec: SubmissionRecord,
     *,

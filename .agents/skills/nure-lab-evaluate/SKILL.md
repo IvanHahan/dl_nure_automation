@@ -167,6 +167,8 @@ Comment content: short per-task notes (Ukrainian is fine). Say if the grade is d
 
 Confirm CLI prints `moodle_grade: …` (and `moodle_comment_id` only if you commented). Re-check on failure; do not claim graded without `--score` success.
 
+After a successful `--score`, the CLI **deletes** the local submission file, its `_grade_dumps/` folder, and the index entry (prints `local_purged: …`). Do not re-read that dump afterward. Use `--keep-local` only if you must retain files. `grades.json` (from `--save`) is kept.
+
 ## Report format
 
 ```
