@@ -47,7 +47,7 @@ When evaluating a group, run `grade-status` per id and only continue for `graded
 
 - Parsed cells: `{SUBJECT} {Лб|Лк|Зал} {MODE} {GROUPS}` e.g. `ТПКС Лб DL КІУКІ-24-3`.
 - Lab **N** = the **N-th** chronological `Лб` session for that group in `parsed.json`.
-- Cache: `guidelines/<subject>/labs/lab-N/held/<group>.json` — **reuse** if present.
+- Cache (gitignored): `guidelines/<subject>/labs/lab-N/held/<group>.json` — **reuse** if present; do not commit.
 - If missing from the schedule → **stop**; do not invent a date.
 
 ## 2. Resolve submission + dump
