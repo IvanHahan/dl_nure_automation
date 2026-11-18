@@ -44,7 +44,7 @@ python -m nure_dl grade local-25-1-1-x-25-1-1-docx --score 70 --comment-file not
 ```
 
 Agent evaluation: skill `.cursor/skills/nure-lab-evaluate/` + rules in `guidelines/<subject>/labs/` (e.g. `guidelines/tpks/labs/`).
-`--score` writes the numeric grade on DL; `--comment` / `--comment-file` posts to submission comments.
+`--score` writes the numeric grade on DL; `--comment` only when something is wrong (skip if all tasks are correct).
 
 ## Dump a report for reading
 

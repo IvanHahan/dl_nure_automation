@@ -60,9 +60,17 @@ Shared defaults (unless the lab file overrides them):
 
 ## 4. Grade on DL
 
-Persist and submit in one step:
+Always submit the numeric grade. Comment only when there is something wrong.
+
+**No comment** if every task is CORRECT and there are no complaints (full marks, clean work).
+
+**Post a comment** (`-c`) when any task is INCORRECT or you have a concrete complaint — include score and short per-task notes (Ukrainian is fine).
 
 ```bash
+# All correct — score only
+.venv/bin/python -m nure_dl grade SUBMISSION_ID --save /tmp/result.json -s SCORE
+
+# Issues — score + comment
 .venv/bin/python -m nure_dl grade SUBMISSION_ID \
   --save /tmp/result.json \
   -s SCORE \
@@ -82,9 +90,7 @@ Persist and submit in one step:
 }
 ```
 
-Comment should include the score and a short per-task summary (Ukrainian is fine).
-
-Confirm CLI prints `moodle_grade: …` (and `moodle_comment_id` if commenting). Re-check on failure; do not claim graded without `--score` success.
+Confirm CLI prints `moodle_grade: …` (and `moodle_comment_id` only if you commented). Re-check on failure; do not claim graded without `--score` success.
 
 ## Report format
 
@@ -96,7 +102,7 @@ guidelines: guidelines/tpks/labs/lab-N.md
 Task 1: CORRECT | INCORRECT — <reason>
 Task 2: …
 Score: N (from guidelines)
-DL: grade=… comment_id=…
+DL: grade=… [comment_id=… only if a comment was posted]
 ```
 
 Reasons: `missing diagram` · `missing code` · `code≠diagram: <what>` · lab-specific notes from guidelines.

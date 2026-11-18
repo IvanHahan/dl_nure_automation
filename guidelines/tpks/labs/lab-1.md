@@ -29,3 +29,9 @@ min grade 60, max 100
 - 3 - 100
 
 Count only tasks marked **CORRECT**. If zero tasks are correct, do not invent a score below the lab minimum without an explicit instructor decision — ask before submitting to DL.
+
+## Moodle comment
+
+Do not leave a submission comment if everything is correct and there are no complaints (e.g. all 3 tasks CORRECT → score 100, no `-c`).
+
+Post a comment only when at least one task is INCORRECT or there is a concrete complaint.
