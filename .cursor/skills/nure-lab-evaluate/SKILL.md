@@ -13,6 +13,31 @@ General evaluator for any subject/lab. Rules live under `guidelines/<subject>/la
 load the matching file before scoring. Always finish by writing the grade to DL
 (`--score` + comment). A dump alone is not a grade.
 
+## 0. Schedule + lab held-on date (before anything else)
+
+**Do this before dump/evaluate/grade.**
+
+1. Ensure the teacher schedule is parsed (strict I@S HTML → JSON):
+
+```bash
+.venv/bin/python -m nure_dl schedule-parse
+# writes local/schedule/parsed.json (gitignored under local/)
+```
+
+   Skip if `local/schedule/parsed.json` already exists unless the HTML was replaced.
+
+2. Resolve when **this** lab was held for the student's group; cache under the lab folder:
+
+```bash
+.venv/bin/python -m nure_dl held-date SUBMISSION_ID
+# or: .venv/bin/python -m nure_dl held-date --subject tpks --lab 1 --group КІУКІ-24-3
+```
+
+- Parsed cells: `{SUBJECT} {Лб|Лк|Зал} {MODE} {GROUPS}` e.g. `ТПКС Лб DL КІУКІ-24-3`.
+- Lab **N** = the **N-th** chronological `Лб` session for that group in `parsed.json`.
+- Cache: `guidelines/<subject>/labs/lab-N/held/<group>.json` — **reuse** if present.
+- If missing from the schedule → **stop**; do not invent a date.
+
 ## 1. Resolve submission + dump
 
 ```bash
@@ -35,11 +60,11 @@ Then map `lab_title` under that subject:
 
 | Lab title contains | Guidelines file |
 |--------------------|-----------------|
-| `Лабораторна робота 1` / `ЛР №1` / `ЛР1` | `guidelines/<subject>/labs/lab-1.md` |
-| `Лабораторна робота 2` / `ЛР №2` / `ЛР2` | `guidelines/<subject>/labs/lab-2.md` |
-| `Лабораторна робота 3` / `ЛР №3` / `ЛР3` | `guidelines/<subject>/labs/lab-3.md` |
+| `Лабораторна робота 1` / `ЛР №1` / `ЛР1` | `guidelines/<subject>/labs/lab-1/guidelines.md` |
+| `Лабораторна робота 2` / `ЛР №2` / `ЛР2` | `guidelines/<subject>/labs/lab-2/guidelines.md` |
+| `Лабораторна робота 3` / `ЛР №3` / `ЛР3` | `guidelines/<subject>/labs/lab-3/guidelines.md` |
 
-Example for ТПКС Lab 1: `guidelines/tpks/labs/lab-1.md`.
+Example for ТПКС Lab 1: `guidelines/tpks/labs/lab-1/guidelines.md`.
 
 `Read` that file **before** judging tasks. If no file exists, stop and say which guideline is missing — do not invent a grading scale.
 
@@ -56,11 +81,30 @@ Shared defaults (unless the lab file overrides them):
 
 1. `Read` dump `text.txt` and scheme/FSM images (skip waveforms).
 2. Per task: apply the loaded guidelines → CORRECT / INCORRECT + one-line reason.
-3. Compute **score** from the lab file’s grading section (do not freestyle).
+3. Compute the **task score** from the lab file’s grading section (do not freestyle).
+
+## 3b. Lateness cap (before submitting to DL)
+
+Clamp the task score with the max allowed by how late the work was submitted:
+
+```bash
+.venv/bin/python -m nure_dl grade-cap SUBMISSION_ID --score TASK_SCORE
+# or dry dates: .venv/bin/python -m nure_dl grade-cap --held YYYY-MM-DD --submitted YYYY-MM-DD
+```
+
+Rules (calendar days after held-on):
+
+| Delay | max_grade |
+|-------|-----------|
+| ≤ 2 weeks (≤ 14 days) | 100 |
+| 2–6 weeks (15–42 days) | 90 |
+| later (> 42 days) | 80 |
+
+Use `final_score` from the command (`min(task_score, max_grade)`). Do not submit a higher Moodle score.
 
 ## 4. Grade on DL
 
-Always submit the numeric grade. Comment only when there is something wrong.
+Always submit the numeric grade (`final_score`). Comment only when there is something wrong.
 
 **No comment** if every task is CORRECT and there are no complaints (full marks, clean work).
 
@@ -98,10 +142,13 @@ Confirm CLI prints `moodle_grade: …` (and `moodle_comment_id` only if you comm
 Student / file: …
 submission_id: …
 subject: tpks
-guidelines: guidelines/tpks/labs/lab-N.md
+held_on: YYYY-MM-DD (from guidelines/…/held/….json)
+guidelines: guidelines/tpks/labs/lab-N/guidelines.md
 Task 1: CORRECT | INCORRECT — <reason>
 Task 2: …
-Score: N (from guidelines)
+Task score: N (from guidelines)
+Lateness: held_on=… submitted_on=… days_after=… max_grade=…
+Score: final (clamped)
 DL: grade=… [comment_id=… only if a comment was posted]
 ```
 

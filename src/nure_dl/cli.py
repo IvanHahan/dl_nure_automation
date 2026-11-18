@@ -11,8 +11,21 @@ from loguru import logger
 from nure_dl.comments import post_submission_comment
 from nure_dl.dump import dump_report
 from nure_dl.grade import prepare_grade, print_prep, save_grade_result
+from nure_dl.grade_cap import (
+    apply_grade_cap,
+    compute_grade_cap,
+    grade_cap_as_dict,
+    grade_cap_for_submission,
+)
 from nure_dl.index import get_submission, load_index, reindex_from_disk
 from nure_dl.mark import submit_assignment_grade
+from nure_dl.schedule import (
+    ensure_lab_held_date,
+    held_path,
+    lab_number_from_title,
+    load_parsed_schedule,
+    write_parsed_schedule,
+)
 from nure_dl.service import download_ungraded
 from nure_dl.settings import load_settings
 
@@ -103,6 +116,70 @@ def build_parser() -> argparse.ArgumentParser:
         help="Read Moodle submission comment text from a file (UTF-8)",
     )
 
+    sched = sub.add_parser(
+        "schedule-parse",
+        help="Parse local/schedule/*.html into local/schedule/parsed.json",
+    )
+    sched.add_argument(
+        "--schedule-dir",
+        type=Path,
+        default=None,
+        help="Schedule directory (default: local/schedule)",
+    )
+    sched.add_argument(
+        "--html",
+        type=Path,
+        default=None,
+        help="Specific HTML file (default: first *.html in schedule dir)",
+    )
+
+    held = sub.add_parser(
+        "held-date",
+        help="Resolve/cache when a lab was held (uses parsed schedule; before evaluate)",
+    )
+    held.add_argument(
+        "submission_id",
+        nargs="?",
+        default=None,
+        help="Optional submission id — uses its group + lab title",
+    )
+    held.add_argument("--subject", default="tpks", help="Guidelines subject slug")
+    held.add_argument("--lab", type=int, default=None, help="Lab number (1, 2, …)")
+    held.add_argument("--group", default=None, help="Group name (e.g. КІУКІ-24-3)")
+    held.add_argument(
+        "--output",
+        default=None,
+        help="Downloads root when resolving via submission_id",
+    )
+    held.add_argument("--json", action="store_true", help="Machine-readable JSON")
+
+    cap = sub.add_parser(
+        "grade-cap",
+        help="Max grade from lateness (held-on vs submission date): 100 / 90 / 80",
+    )
+    cap.add_argument(
+        "submission_id",
+        nargs="?",
+        default=None,
+        help="Submission id — uses held-date cache + Moodle file time",
+    )
+    cap.add_argument("--held", default=None, help="Held-on date YYYY-MM-DD / dd.mm.yyyy")
+    cap.add_argument(
+        "--submitted",
+        default=None,
+        help="Submission date YYYY-MM-DD / dd.mm.yyyy (with --held)",
+    )
+    cap.add_argument("--subject", default="tpks", help="Guidelines subject slug")
+    cap.add_argument("--lab", type=int, default=None, help="Lab number when using submission_id")
+    cap.add_argument(
+        "--score",
+        type=float,
+        default=None,
+        help="Optional task score to clamp under the cap",
+    )
+    cap.add_argument("--output", default=None, help="Downloads root for submission_id")
+    cap.add_argument("--json", action="store_true", help="Machine-readable JSON")
+
     subs = sub.add_parser(
         "submissions",
         help="List or resolve cached submission ids (from download index)",
@@ -142,6 +219,12 @@ def main(argv: list[str] | None = None) -> None:
         dump_report(args.path, args.out)
     elif args.command == "grade":
         _cmd_grade(args)
+    elif args.command == "schedule-parse":
+        raise SystemExit(_cmd_schedule_parse(args))
+    elif args.command == "held-date":
+        raise SystemExit(_cmd_held_date(args))
+    elif args.command == "grade-cap":
+        raise SystemExit(_cmd_grade_cap(args))
     elif args.command == "submissions":
         raise SystemExit(_cmd_submissions(args))
     else:
@@ -217,6 +300,89 @@ def _grade_comment_text(args: argparse.Namespace) -> str | None:
     if args.comment is not None:
         return args.comment
     return None
+
+
+def _cmd_schedule_parse(args: argparse.Namespace) -> int:
+    path = write_parsed_schedule(args.schedule_dir, html_path=args.html)
+    parsed = load_parsed_schedule(args.schedule_dir)
+    print(f"wrote:    {path}")
+    print(f"teacher:  {parsed.teacher}")
+    print(f"entries:  {len(parsed.entries)}")
+    print(f"subjects: {', '.join(f'{k}={v}' for k, v in parsed.subjects.items())}")
+    return 0
+
+
+def _cmd_grade_cap(args: argparse.Namespace) -> int:
+    if args.held and args.submitted:
+        cap = compute_grade_cap(args.held, args.submitted)
+    elif args.submission_id:
+        settings = load_settings()
+        root = Path(args.output) if args.output else settings.output_dir
+        rec = get_submission(root, args.submission_id)
+        if rec is None:
+            logger.error("Unknown submission id: {}", args.submission_id)
+            return 1
+        cap = grade_cap_for_submission(
+            settings,
+            rec,
+            subject=args.subject,
+            lab_number=args.lab,
+            output_dir=root,
+        )
+    else:
+        raise SystemExit("Pass submission_id, or both --held and --submitted")
+
+    payload = grade_cap_as_dict(cap)
+    if args.score is not None:
+        payload["task_score"] = args.score
+        payload["final_score"] = apply_grade_cap(args.score, cap)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"held_on:      {cap.held_on}")
+        print(f"submitted_on: {cap.submitted_on}")
+        print(f"days_after:   {cap.days_after}")
+        print(f"band:         {cap.band}")
+        print(f"max_grade:    {cap.max_grade}")
+        if args.score is not None:
+            print(f"task_score:   {args.score}")
+            print(f"final_score:  {payload['final_score']}")
+    return 0
+
+
+def _cmd_held_date(args: argparse.Namespace) -> int:
+    subject = args.subject
+    lab_number = args.lab
+    group = args.group
+    if args.submission_id:
+        settings = load_settings()
+        root = Path(args.output) if args.output else settings.output_dir
+        rec = get_submission(root, args.submission_id)
+        if rec is None:
+            logger.error("Unknown submission id: {}", args.submission_id)
+            return 1
+        group = group or rec.group
+        if lab_number is None:
+            lab_number = lab_number_from_title(rec.lab_title)
+            if lab_number is None:
+                raise SystemExit(
+                    f"Could not parse lab number from title {rec.lab_title!r}; pass --lab"
+                )
+    if not group or lab_number is None:
+        raise SystemExit("Need --group and --lab, or a submission_id")
+
+    path = held_path(subject, lab_number, group)
+    reused = path.is_file()
+    session = ensure_lab_held_date(subject=subject, lab_number=lab_number, group=group)
+    if args.json:
+        print(json.dumps(asdict(session), ensure_ascii=False, indent=2))
+    else:
+        print(f"subject:  {session.subject}")
+        print(f"lab:      {lab_number}")
+        print(f"group:    {session.group}")
+        print(f"held_on:  {session.date} ({session.weekday} {session.time})")
+        print(f"cached:   {path} ({'reused' if reused else 'wrote'})")
+    return 0
 
 
 def _cmd_submissions(args: argparse.Namespace) -> int:

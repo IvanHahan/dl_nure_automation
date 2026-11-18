@@ -30,6 +30,8 @@ min grade 60, max 100
 
 Count only tasks marked **CORRECT**. If zero tasks are correct, do not invent a score below the lab minimum without an explicit instructor decision — ask before submitting to DL.
 
+After the task score, clamp with lateness via `python -m nure_dl grade-cap` (≤2 weeks → max 100; 2–6 weeks → max 90; later → max 80). Submit `final_score`.
+
 ## Moodle comment
 
 Do not leave a submission comment if everything is correct and there are no complaints (e.g. all 3 tasks CORRECT → score 100, no `-c`).
