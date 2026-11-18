@@ -44,27 +44,29 @@ If both lab and group are missing and it is not a submission id, ask — do not 
 .venv/bin/python -m nure_dl submissions --json
 ```
 
-3. If the filtered list is empty: say so. Optionally run download for that group, then re-list — do not invent ids.
+3. Drop every submission whose **group is not on the teacher schedule** (`local/schedule/parsed.json`). Same rule as `download` / `refresh`. Note them as `skipped not on schedule`. **Never ask the user for a held-on date** for those groups — ignore and move on.
+
+4. If the remaining list is empty: say so. Optionally run download for an on-schedule group, then re-list — do not invent ids.
 
 ```bash
 .venv/bin/python -m nure_dl download --group GROUP_SUBSTRING
 ```
 
-4. Deduplicate: one file per student when both `.docx` and `.pdf` exist for the same person/lab — prefer `.docx`, else the newest/largest; note skips in the summary.
+5. Deduplicate: one file per student when both `.docx` and `.pdf` exist for the same person/lab — prefer `.docx`, else the newest/largest; note skips in the summary.
 
-5. Print the planned list (id, student, group, lab) and proceed (invoking `/evaluate` is confirmation to grade that scope).
+6. Print the planned list (id, student, group, lab) and proceed (invoking `/evaluate` is confirmation to grade that scope).
 
 ## Evaluate each submission
 
 For each id, follow **`nure-lab-evaluate`** end-to-end:
 
 1. `grade-status` — skip if graded unless `regrade`.
-2. `held-date` (once per group+lab is enough; reuse `guidelines/.../held/`).
+2. Schedule / `held-date` — if the group is off-schedule or held-date is missing → **skip** (`skipped not on schedule`); do not ask the user.
 3. Dump / prepare via `grade SUBMISSION_ID`.
 4. Load `guidelines/<subject>/labs/lab-N/guidelines.md` — stop if missing.
 5. Judge tasks → task score → `grade-cap` → submit Moodle `--score` (+ `-c` when anything incorrect).
 
-Do not stop the whole batch on one failure: record the error, continue, report at the end.
+Do not stop the whole batch on one failure or one off-schedule group: record the skip/error, continue, report at the end.
 
 Large batches: process sequentially (Moodle + dumps); you may parallelize read-only `grade-status` checks first to shrink the list.
 
@@ -72,7 +74,7 @@ Large batches: process sequentially (Moodle + dumps); you may parallelize read-o
 
 ```
 Scope: subject=… lab=… group=… (or all) regrade=yes|no
-Planned: N | Skipped graded: K | Evaluated: M | Failed: F
+Planned: N | Skipped graded: K | Skipped not on schedule: S | Evaluated: M | Failed: F
 
 id | student | group | lab | task_score | final | DL | note
 …  | …       | …     | …   | …          | …     | …  | …
@@ -81,4 +83,4 @@ Failures:
 - id — reason
 ```
 
-Keep notes short (`skipped graded`, `missing guidelines`, `missing diagram`, …).
+Keep notes short (`skipped graded`, `skipped not on schedule`, `missing guidelines`, `missing diagram`, …).

@@ -28,11 +28,13 @@ ids, then run this skill per submission.
 
 When evaluating a group, run `grade-status` per id and only continue for `graded: false`.
 
-## 1. Schedule + lab held-on date
+## 1. Schedule ownership + lab held-on date
 
 **Do this before dump/evaluate/grade** (only for ungraded submissions).
 
-1. Ensure the teacher schedule is parsed (strict I@S HTML → JSON):
+Only grade groups that appear on **your** teacher schedule (`local/schedule/parsed.json`). Other teachers' Moodle groups are out of scope.
+
+1. Ensure the schedule is parsed:
 
 ```bash
 .venv/bin/python -m nure_dl schedule-parse
@@ -41,7 +43,9 @@ When evaluating a group, run `grade-status` per id and only continue for `graded
 
    Skip if `local/schedule/parsed.json` already exists unless the HTML was replaced.
 
-2. Resolve when **this** lab was held for the student's group; cache under the lab folder:
+2. If the submission's **group is not on the schedule** → **skip** that submission. Note `skipped not on schedule`. Do **not** ask the user for a held-on date, invent a date, or continue grading it.
+
+3. Resolve when **this** lab was held for the student's group; cache under the lab folder:
 
 ```bash
 .venv/bin/python -m nure_dl held-date SUBMISSION_ID
@@ -51,7 +55,7 @@ When evaluating a group, run `grade-status` per id and only continue for `graded
 - Parsed cells: `{SUBJECT} {Лб|Лк|Зал} {MODE} {GROUPS}` e.g. `ТПКС Лб DL КІУКІ-24-3`.
 - Lab **N** = the **N-th** chronological `Лб` session for that group in `parsed.json`.
 - Cache (gitignored): `guidelines/<subject>/labs/lab-N/held/<group>.json` — **reuse** if present; do not commit.
-- If missing from the schedule → **stop**; do not invent a date.
+- If `held-date` fails because the group/lab is absent from the schedule → same as step 2: **skip**, note it, never ask the user.
 
 ## 2. Resolve submission + dump
 
