@@ -12,11 +12,16 @@ from loguru import logger
 _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 
 
+def dump_dir_for(path: Path, out_dir: Path) -> Path:
+    """Directory where `dump_report` would write this file's text/images."""
+    return out_dir.expanduser().resolve() / _safe(path.stem)
+
+
 def dump_report(path: Path, out_dir: Path) -> Path:
     path = path.expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(path)
-    dest = out_dir.expanduser().resolve() / _safe(path.stem)
+    dest = dump_dir_for(path, out_dir)
     dest.mkdir(parents=True, exist_ok=True)
     images = dest / "images"
     images.mkdir(exist_ok=True)

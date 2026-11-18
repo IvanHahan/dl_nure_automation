@@ -1,0 +1,1 @@
+../../../.agents/skills/clean-graded/command.md

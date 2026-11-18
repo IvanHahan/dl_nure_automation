@@ -11,7 +11,7 @@ labs/lab-N/
 | Folder | Lab |
 |--------|-----|
 | `labs/lab-1/` | Лабораторна робота 1 |
-| `labs/lab-2/` | Лабораторна робота 2 (add when ready) |
+| `labs/lab-2/` | Лабораторна робота 2 — поведінкові/структурні SV-моделі |
 | `labs/lab-3/` | Лабораторна робота 3 (add when ready) |
 
 Schedule: put the I@S HTML in `local/schedule/`, then `python -m nure_dl schedule-parse` → `local/schedule/parsed.json`.

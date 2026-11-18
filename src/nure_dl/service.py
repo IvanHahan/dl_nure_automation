@@ -76,9 +76,14 @@ def download_ungraded(
     settings: Settings,
     *,
     dry_run: bool = False,
+    force: bool = False,
     group_filter: str | None = None,
     course_ids: tuple[int, ...] | None = None,
 ) -> int:
+    """Download Moodle ungraded submission files into the local cache.
+
+    When ``force`` is true, existing local files are re-downloaded (refresh).
+    """
     downloaded = 0
     targets = course_ids or settings.course_ids
     with MoodleClient(settings.base_url, settings.session) as client:
@@ -109,12 +114,17 @@ def download_ungraded(
                         logger.info("DRY-RUN {}", dest)
                         downloaded += 1
                         continue
-                    if not (dest.exists() and dest.stat().st_size > 0):
-                        client.download(item.url, dest)
-                        logger.info("Downloaded {}", dest)
-                        downloaded += 1
-                    else:
+                    exists = dest.exists() and dest.stat().st_size > 0
+                    if exists and not force:
                         logger.debug("Skip existing {}", dest)
+                    else:
+                        client.download(item.url, dest)
+                        logger.info(
+                            "{} {}",
+                            "Re-downloaded" if exists else "Downloaded",
+                            dest,
+                        )
+                        downloaded += 1
                     rec = register_submission(settings.output_dir, lab, item, dest)
                     logger.info("Indexed {} → {}", rec.id, dest)
     return downloaded

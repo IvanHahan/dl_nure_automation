@@ -1,0 +1,1 @@
+../skills/evaluate/command.md

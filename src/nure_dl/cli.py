@@ -8,6 +8,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from nure_dl.clean import clean_graded_submissions, clean_result_as_dict
 from nure_dl.comments import post_submission_comment
 from nure_dl.dump import dump_report
 from nure_dl.grade import prepare_grade, print_prep, save_grade_result
@@ -59,6 +60,65 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only labs whose group name contains this substring",
     )
     download.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List destination paths without downloading",
+    )
+    download.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-download even when the local file already exists",
+    )
+
+    clean = sub.add_parser(
+        "clean-graded",
+        help="Delete local files for submissions already graded on Moodle",
+    )
+    clean.add_argument(
+        "--output",
+        default=None,
+        help="Downloads root containing submissions.json",
+    )
+    clean.add_argument(
+        "--group",
+        default=None,
+        help="Only submissions whose group name contains this substring",
+    )
+    clean.add_argument(
+        "--lab",
+        type=int,
+        default=None,
+        help="Only this lab number (from lab title)",
+    )
+    clean.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List graded locals without deleting",
+    )
+    clean.add_argument("--json", action="store_true", help="Machine-readable JSON")
+
+    refresh = sub.add_parser(
+        "refresh",
+        help="Re-download all currently ungraded Moodle submissions (force)",
+    )
+    refresh.add_argument(
+        "--course-id",
+        type=int,
+        action="append",
+        default=None,
+        help="Course id (repeatable). Overrides MOODLE_COURSE_IDS from .env",
+    )
+    refresh.add_argument(
+        "--output",
+        default=None,
+        help="Override output directory (default: downloads/)",
+    )
+    refresh.add_argument(
+        "--group",
+        default=None,
+        help="Only labs whose group name contains this substring",
+    )
+    refresh.add_argument(
         "--dry-run",
         action="store_true",
         help="List destination paths without downloading",
@@ -176,14 +236,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Submission id — uses held-date cache + Moodle file time",
     )
-    cap.add_argument("--held", default=None, help="Held-on date YYYY-MM-DD / dd.mm.yyyy")
+    cap.add_argument(
+        "--held", default=None, help="Held-on date YYYY-MM-DD / dd.mm.yyyy"
+    )
     cap.add_argument(
         "--submitted",
         default=None,
         help="Submission date YYYY-MM-DD / dd.mm.yyyy (with --held)",
     )
     cap.add_argument("--subject", default="tpks", help="Guidelines subject slug")
-    cap.add_argument("--lab", type=int, default=None, help="Lab number when using submission_id")
+    cap.add_argument(
+        "--lab", type=int, default=None, help="Lab number when using submission_id"
+    )
     cap.add_argument(
         "--score",
         type=float,
@@ -228,6 +292,10 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.command == "download":
         _cmd_download(args)
+    elif args.command == "clean-graded":
+        raise SystemExit(_cmd_clean_graded(args))
+    elif args.command == "refresh":
+        _cmd_refresh(args)
     elif args.command == "dump":
         dump_report(args.path, args.out)
     elif args.command == "grade":
@@ -259,6 +327,7 @@ def _cmd_download(args: argparse.Namespace) -> None:
     count = download_ungraded(
         settings,
         dry_run=args.dry_run,
+        force=args.force,
         group_filter=args.group,
     )
     action = "Would download" if args.dry_run else "Downloaded"
@@ -268,6 +337,55 @@ def _cmd_download(args: argparse.Namespace) -> None:
         count,
         ",".join(str(c) for c in settings.course_ids),
         settings.output_dir.resolve(),
+        settings.output_dir.resolve(),
+    )
+
+
+def _cmd_clean_graded(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    root = Path(args.output) if args.output else settings.output_dir
+    result = clean_graded_submissions(
+        settings,
+        output_dir=root,
+        group_filter=args.group,
+        lab_filter=args.lab,
+        dry_run=args.dry_run,
+    )
+    if args.json:
+        print(json.dumps(clean_result_as_dict(result), ensure_ascii=False, indent=2))
+    else:
+        print(f"checked:  {result.checked}")
+        print(f"graded:   {result.graded}")
+        print(f"removed:  {result.removed}{' (dry-run)' if result.dry_run else ''}")
+        print(f"kept:     {result.skipped}")
+        print(f"errors:   {result.errors}")
+        for sid in result.removed_ids:
+            print(f"  - {sid}")
+    return 1 if result.errors and not result.removed else 0
+
+
+def _cmd_refresh(args: argparse.Namespace) -> None:
+    settings = load_settings()
+    updates: dict = {}
+    if args.course_id:
+        updates["course_ids"] = tuple(args.course_id)
+    if args.output is not None:
+        updates["output_dir"] = Path(args.output)
+    if updates:
+        settings = replace(settings, **updates)
+
+    count = download_ungraded(
+        settings,
+        dry_run=args.dry_run,
+        force=True,
+        group_filter=args.group,
+    )
+    action = "Would refresh" if args.dry_run else "Refreshed"
+    logger.info(
+        "{} {} ungraded file(s) from courses {} → {}",
+        action,
+        count,
+        ",".join(str(c) for c in settings.course_ids),
         settings.output_dir.resolve(),
     )
 
@@ -425,7 +543,9 @@ def _cmd_submissions(args: argparse.Namespace) -> int:
     root = Path(args.output) if args.output else settings.output_dir
     if args.reindex:
         records = reindex_from_disk(root)
-        logger.info("Indexed {} submission(s) → {}", len(records), root / "submissions.json")
+        logger.info(
+            "Indexed {} submission(s) → {}", len(records), root / "submissions.json"
+        )
         if args.submission_id is None and not args.json:
             return 0
     if args.submission_id:
