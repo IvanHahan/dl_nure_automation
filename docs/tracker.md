@@ -2,6 +2,9 @@
 
 ## Active
 
+- T-002 — Share Moodle lab and student lookups — 🔵 — `refactor/T-002-share-moodle-lookups`
+  - Preserve course matching and verify AJAX student ID recovery with an HTML fallback.
+
 ## Backlog
 
 ## Completed
