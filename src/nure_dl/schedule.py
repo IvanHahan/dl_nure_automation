@@ -123,7 +123,9 @@ def write_parsed_schedule(
         "entries": [asdict(e) for e in parsed.entries],
         "parsed_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     logger.info(
         "Parsed {} → {} ({} entries, teacher={})",
         src.name,
@@ -181,7 +183,9 @@ def ensure_lab_held_date(
     path = held_path(subject, lab_number, group)
     if path.is_file():
         data = json.loads(path.read_text(encoding="utf-8"))
-        return LabSession(**{k: data[k] for k in LabSession.__dataclass_fields__ if k in data})
+        return LabSession(
+            **{k: data[k] for k in LabSession.__dataclass_fields__ if k in data}
+        )
 
     session = find_lab_session(
         subject=subject,
@@ -262,11 +266,40 @@ def list_group_lab_sessions(
     return matched
 
 
+def schedule_group_names(
+    schedule_dir: Path | None = None,
+    *,
+    kind: str | None = None,
+) -> list[str]:
+    """Unique group labels from the teacher's parsed schedule (optional kind filter)."""
+    parsed = load_parsed_schedule(schedule_dir)
+    seen: set[str] = set()
+    out: list[str] = []
+    for entry in parsed.entries:
+        if kind is not None and entry.kind != kind:
+            continue
+        for group in entry.groups:
+            if group not in seen:
+                seen.add(group)
+                out.append(group)
+    return out
+
+
+def group_on_schedule(
+    group: str,
+    schedule_dir: Path | None = None,
+    *,
+    kind: str | None = None,
+) -> bool:
+    """True when ``group`` appears on the teacher's schedule (fuzzy match)."""
+    return _group_matches(schedule_group_names(schedule_dir, kind=kind), group)
+
+
 def lab_number_from_title(lab_title: str) -> int | None:
     match = re.search(
         r"(?:лабораторн\w*\s+робот\w*|лр|лб)\s*№?\s*(\d+)",
         lab_title,
-        re.I,
+        re.IGNORECASE,
     )
     if match:
         return int(match.group(1))
@@ -385,9 +418,7 @@ def _parse_week_dates(cells: list[str]) -> list[date | None]:
         if not match:
             out.append(None)
             continue
-        out.append(
-            date(int(match.group(3)), int(match.group(2)), int(match.group(1)))
-        )
+        out.append(date(int(match.group(3)), int(match.group(2)), int(match.group(1))))
     return out
 
 

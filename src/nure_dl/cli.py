@@ -69,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Re-download even when the local file already exists",
     )
+    download.add_argument(
+        "--all-groups",
+        action="store_true",
+        help="Include Moodle groups not on the teacher schedule (default: schedule only)",
+    )
 
     clean = sub.add_parser(
         "clean-graded",
@@ -122,6 +127,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="List destination paths without downloading",
+    )
+    refresh.add_argument(
+        "--all-groups",
+        action="store_true",
+        help="Include Moodle groups not on the teacher schedule (default: schedule only)",
     )
 
     dump = sub.add_parser(
@@ -329,6 +339,7 @@ def _cmd_download(args: argparse.Namespace) -> None:
         dry_run=args.dry_run,
         force=args.force,
         group_filter=args.group,
+        respect_schedule=not args.all_groups,
     )
     action = "Would download" if args.dry_run else "Downloaded"
     logger.info(
@@ -379,6 +390,7 @@ def _cmd_refresh(args: argparse.Namespace) -> None:
         dry_run=args.dry_run,
         force=True,
         group_filter=args.group,
+        respect_schedule=not args.all_groups,
     )
     action = "Would refresh" if args.dry_run else "Refreshed"
     logger.info(

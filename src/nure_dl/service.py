@@ -15,6 +15,7 @@ from nure_dl.course import (
 from nure_dl.grading import grading_url, has_next_page, parse_ungraded_files
 from nure_dl.index import register_submission
 from nure_dl.models import LabAssignment, SubmissionFile
+from nure_dl.schedule import group_on_schedule, schedule_group_names
 from nure_dl.settings import Settings
 
 # Allow ":" so Moodle shortnames stay readable; still block path separators.
@@ -79,13 +80,30 @@ def download_ungraded(
     force: bool = False,
     group_filter: str | None = None,
     course_ids: tuple[int, ...] | None = None,
+    respect_schedule: bool = True,
 ) -> int:
     """Download Moodle ungraded submission files into the local cache.
 
     When ``force`` is true, existing local files are re-downloaded (refresh).
+    By default only groups that appear on the teacher's parsed schedule are
+    downloaded (other teachers' groups are skipped).
     """
     downloaded = 0
     targets = course_ids or settings.course_ids
+    scheduled: list[str] | None = None
+    if respect_schedule:
+        scheduled = schedule_group_names()
+        if not scheduled:
+            raise SystemExit(
+                "Parsed schedule has no groups — run "
+                "`python -m nure_dl schedule-parse` first, or pass --all-groups."
+            )
+        logger.info(
+            "Schedule filter on: {} group(s) ({})",
+            len(scheduled),
+            ", ".join(scheduled),
+        )
+
     with MoodleClient(settings.base_url, settings.session) as client:
         for course_id in targets:
             labs = list_labs(client, settings, course_id)
@@ -98,6 +116,21 @@ def download_ungraded(
                     group_filter,
                     len(labs),
                 )
+            if respect_schedule:
+                kept: list[LabAssignment] = []
+                skipped_groups: set[str] = set()
+                for lab in labs:
+                    if group_on_schedule(lab.group):
+                        kept.append(lab)
+                    else:
+                        skipped_groups.add(lab.group)
+                if skipped_groups:
+                    logger.info(
+                        "Skipping {} group(s) not on schedule: {}",
+                        len(skipped_groups),
+                        ", ".join(sorted(skipped_groups)),
+                    )
+                labs = kept
 
             for lab in labs:
                 files = collect_ungraded(client, settings, lab)

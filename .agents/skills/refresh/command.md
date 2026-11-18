@@ -6,18 +6,21 @@ Invoking this command is confirmation to hit Moodle and overwrite matching local
 
 This does **not** delete graded locals — use `/clean-graded` for that (often run before `/refresh`).
 
+Only groups on the teacher's parsed schedule are included (other teachers' Moodle sections are skipped). Needs `local/schedule/parsed.json` (`schedule-parse`). Pass `all-groups` to bypass.
+
 ## Resolve scope from $ARGUMENTS
 
 | Pattern | Meaning |
 |---------|---------|
-| empty | All courses from `.env` / settings. |
-| `<group>` | Only labs whose group name contains this substring. |
+| empty | All courses from `.env` / settings (schedule groups only). |
+| `<group>` | Only labs whose group name contains this substring (still must be on schedule). |
+| `all-groups` / `--all-groups` | Also download groups not on the schedule. |
 | `dry-run` / `--dry-run` | List destinations without downloading. |
 
 ## Run
 
 ```bash
-.venv/bin/python -m nure_dl refresh [ --group GROUP ] [ --dry-run ]
+.venv/bin/python -m nure_dl refresh [ --group GROUP ] [ --all-groups ] [ --dry-run ]
 ```
 
 Equivalent to `download --force` for currently ungraded files only.
