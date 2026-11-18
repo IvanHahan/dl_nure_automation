@@ -28,12 +28,12 @@ min grade 60, max 100
 - 2 - 70
 - 3 - 100
 
-Count only tasks marked **CORRECT**. If zero tasks are correct, do not invent a score below the lab minimum without an explicit instructor decision — ask before submitting to DL.
+Count only tasks marked **CORRECT**. If zero tasks are correct, submit **0** on DL (work reviewed) unless the instructor specifies another value.
 
 After the task score, clamp with lateness via `python -m nure_dl grade-cap` (≤2 weeks → max 100; 2–6 weeks → max 90; later → max 80). Submit `final_score`.
 
 ## Moodle comment
 
-Do not leave a submission comment if everything is correct and there are no complaints (e.g. all 3 tasks CORRECT → score 100, no `-c`).
+If anything is INCORRECT or missing → **must** leave a Moodle submission comment, even when no numeric grade is set yet.
 
-Post a comment only when at least one task is INCORRECT or there is a concrete complaint.
+Do not leave a comment only when everything is correct and there are no complaints.

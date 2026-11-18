@@ -16,8 +16,10 @@ After the task score from lab guidelines, run `python -m nure_dl grade-cap`:
 - 2–6 weeks → max **90**
 - later → max **80**
 
-Submit `final_score` = min(task score, max_grade).
+Submit `final_score` = min(task score, max_grade). Always submit a numeric grade after review (use **0** if nothing is correct) so Moodle shows Graded.
 
 ## Moodle comments (all subjects)
 
-Do not leave a submission comment if the work is fully correct and there are no complaints. Comment only when something is wrong.
+If anything is incorrect or missing → **must** leave a submission comment (together with the grade).
+
+Skip the comment only when the work is fully correct and there are no complaints.

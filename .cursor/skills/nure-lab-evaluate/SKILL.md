@@ -13,9 +13,21 @@ General evaluator for any subject/lab. Rules live under `guidelines/<subject>/la
 load the matching file before scoring. Always finish by writing the grade to DL
 (`--score` + comment). A dump alone is not a grade.
 
-## 0. Schedule + lab held-on date (before anything else)
+## 0. Already graded? (before anything else)
 
-**Do this before dump/evaluate/grade.**
+**For every submission, check Moodle first.** If already graded, **skip** — do not dump, re-score, or overwrite unless the user explicitly asks to regrade.
+
+```bash
+.venv/bin/python -m nure_dl grade-status SUBMISSION_ID
+# graded: true  → skip this submission
+# graded: false → continue
+```
+
+When evaluating a group, run `grade-status` per id and only continue for `graded: false`.
+
+## 1. Schedule + lab held-on date
+
+**Do this before dump/evaluate/grade** (only for ungraded submissions).
 
 1. Ensure the teacher schedule is parsed (strict I@S HTML → JSON):
 
@@ -38,7 +50,7 @@ load the matching file before scoring. Always finish by writing the grade to DL
 - Cache: `guidelines/<subject>/labs/lab-N/held/<group>.json` — **reuse** if present.
 - If missing from the schedule → **stop**; do not invent a date.
 
-## 1. Resolve submission + dump
+## 2. Resolve submission + dump
 
 ```bash
 .venv/bin/python -m nure_dl grade SUBMISSION_ID
@@ -46,7 +58,7 @@ load the matching file before scoring. Always finish by writing the grade to DL
 
 Note course/subject, `lab_title`, student, dump path (`text.txt`, `images/`). Code may be in Word tables (included in dump).
 
-## 2. Pick subject, then lab guidelines
+## 3. Pick subject, then lab guidelines
 
 Subjects (folder slug → full name):
 
@@ -77,13 +89,13 @@ Shared defaults (unless the lab file overrides them):
 - Match → **CORRECT**. Mismatch → **INCORRECT** (`code≠diagram: …`).
 - **Ignore** waveforms / timing diagrams / console dumps / playground links as sole proof.
 
-## 3. Evaluate
+## 4. Evaluate
 
 1. `Read` dump `text.txt` and scheme/FSM images (skip waveforms).
 2. Per task: apply the loaded guidelines → CORRECT / INCORRECT + one-line reason.
 3. Compute the **task score** from the lab file’s grading section (do not freestyle).
 
-## 3b. Lateness cap (before submitting to DL)
+## 4b. Lateness cap (before submitting to DL)
 
 Clamp the task score with the max allowed by how late the work was submitted:
 
@@ -102,19 +114,31 @@ Rules (calendar days after held-on):
 
 Use `final_score` from the command (`min(task_score, max_grade)`). Do not submit a higher Moodle score.
 
-## 4. Grade on DL
+## 5. Grade on DL
 
-Always submit the numeric grade (`final_score`). Comment only when there is something wrong.
+Never overwrite an existing Moodle grade unless the user asked to regrade.
 
-**No comment** if every task is CORRECT and there are no complaints (full marks, clean work).
+### Comments (mandatory on problems)
 
-**Post a comment** (`-c`) when any task is INCORRECT or you have a concrete complaint — include score and short per-task notes (Ukrainian is fine).
+**If anything is INCORRECT or missing** (diagram, code, mismatch, …) → you **must** post a Moodle submission comment (`-c`), even when no numeric grade is submitted yet (e.g. waiting for a score below the lab minimum).
+
+Comment content: short per-task notes (Ukrainian is fine). Say if the grade is deferred.
+
+**No comment** only when every task is CORRECT and there are no complaints.
+
+### Score
+
+**Always** submit a numeric Moodle grade (`-s`) after review so the work shows as Graded on DL.
+
+- Normal path: `final_score` from guidelines + lateness cap.
+- **0 tasks correct** (or otherwise below the lab minimum): submit **0** unless the instructor gives another value. Still leave the mandatory comment.
+- Do not leave a submission “reviewed” with only a comment and no grade.
 
 ```bash
-# All correct — score only
+# All correct — score only, no comment
 .venv/bin/python -m nure_dl grade SUBMISSION_ID --save /tmp/result.json -s SCORE
 
-# Issues — score + comment
+# Issues — score + comment (required)
 .venv/bin/python -m nure_dl grade SUBMISSION_ID \
   --save /tmp/result.json \
   -s SCORE \

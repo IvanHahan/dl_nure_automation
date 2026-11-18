@@ -44,7 +44,7 @@ python -m nure_dl grade local-25-1-1-x-25-1-1-docx --score 70 --comment-file not
 ```
 
 Agent evaluation: skill `.cursor/skills/nure-lab-evaluate/` + rules in `guidelines/<subject>/labs/lab-N/`.
-Before evaluating: `schedule-parse` → `held-date` → evaluate → `grade-cap` (lateness max 100/90/80) → `--score`.
+Before evaluating: `grade-status` (skip if already graded) → `schedule-parse` → `held-date` → evaluate → `grade-cap` (100/90/80) → `--score`.
 `--score` writes the numeric grade on DL; `--comment` only when something is wrong (skip if all tasks are correct).
 
 ## Dump a report for reading

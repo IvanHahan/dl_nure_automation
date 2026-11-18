@@ -17,6 +17,7 @@ from nure_dl.grade_cap import (
     grade_cap_as_dict,
     grade_cap_for_submission,
 )
+from nure_dl.grade_status import check_grade_status, grade_status_as_dict
 from nure_dl.index import get_submission, load_index, reindex_from_disk
 from nure_dl.mark import submit_assignment_grade
 from nure_dl.schedule import (
@@ -153,6 +154,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     held.add_argument("--json", action="store_true", help="Machine-readable JSON")
 
+    status = sub.add_parser(
+        "grade-status",
+        help="Check whether a submission is already graded on Moodle (skip if yes)",
+    )
+    status.add_argument("submission_id", help="Id from submissions.json")
+    status.add_argument(
+        "--output",
+        default=None,
+        help="Downloads root containing submissions.json",
+    )
+    status.add_argument("--json", action="store_true", help="Machine-readable JSON")
+
     cap = sub.add_parser(
         "grade-cap",
         help="Max grade from lateness (held-on vs submission date): 100 / 90 / 80",
@@ -223,6 +236,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(_cmd_schedule_parse(args))
     elif args.command == "held-date":
         raise SystemExit(_cmd_held_date(args))
+    elif args.command == "grade-status":
+        raise SystemExit(_cmd_grade_status(args))
     elif args.command == "grade-cap":
         raise SystemExit(_cmd_grade_cap(args))
     elif args.command == "submissions":
@@ -309,6 +324,26 @@ def _cmd_schedule_parse(args: argparse.Namespace) -> int:
     print(f"teacher:  {parsed.teacher}")
     print(f"entries:  {len(parsed.entries)}")
     print(f"subjects: {', '.join(f'{k}={v}' for k, v in parsed.subjects.items())}")
+    return 0
+
+
+def _cmd_grade_status(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    root = Path(args.output) if args.output else settings.output_dir
+    rec = get_submission(root, args.submission_id)
+    if rec is None:
+        logger.error("Unknown submission id: {}", args.submission_id)
+        return 1
+    status = check_grade_status(settings, rec, output_dir=root)
+    if args.json:
+        print(json.dumps(grade_status_as_dict(status), ensure_ascii=False, indent=2))
+    else:
+        print(f"submission_id: {status.submission_id}")
+        print(f"student:       {status.student_name}")
+        print(f"lab:           {status.lab_title} ({status.group})")
+        print(f"graded:        {str(status.graded).lower()}")
+        print(f"grade:         {status.grade if status.grade is not None else ''}")
+    # Exit 0 if graded (skip), 2 if not graded — easy for scripts; always 0 for interactive
     return 0
 
 
