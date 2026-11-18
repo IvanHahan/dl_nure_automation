@@ -1,6 +1,53 @@
-# NURE DL helpers
+# dl_nure_automation
 
-Personal scripts for [ХНУРЕ ДН](https://dl.nure.ua) (Moodle), using your browser `MoodleSession`.
+Automates grading workflow for [ХНУРЕ ДН](https://dl.nure.ua) (Moodle): download ungraded lab reports, evaluate them with an AI agent against per-lab guidelines, and submit scores (and comments) back to DL.
+
+## How it works
+
+1. **Auth** — CLI uses your browser `MoodleSession` cookie (no password login).
+2. **Schedule** — your I@S teacher schedule defines which groups you own. Downloads and evaluation skip other teachers’ groups.
+3. **Download / refresh** — pulls only **ungraded** submissions for on-schedule groups into `downloads/` and indexes them in `submissions.json`.
+4. **Evaluate** — an agent (Cursor/Codex skills) dumps each report, checks it against lab guidelines, applies a lateness cap from the schedule, and posts the Moodle grade.
+5. **Cleanup** — after a successful Moodle `--score`, the local file and dump are deleted (index updated). Use `/clean-graded` to purge leftovers that are already graded on DL.
+
+Agent entry points: `/evaluate`, `/refresh`, `/clean-graded` (see `.agents/skills/` and `.cursor/commands/`). Per-submission procedure: `nure-lab-evaluate`.
+
+## Moodle session (required)
+
+Copy the session cookie from the browser into `.env`:
+
+1. Open https://dl.nure.ua and sign in.
+2. DevTools → **Application** → **Cookies** → `dl.nure.ua`.
+3. Copy the value of **`MoodleSession`**.
+
+```bash
+cp .env.example .env
+# Set MOODLE_SESSION=... in .env
+```
+
+Also set `MOODLE_COURSE_IDS` (comma-separated course ids) and optionally `MOODLE_BASE_URL` / `MOODLE_OUTPUT_DIR`. The session expires; refresh the cookie when downloads or grades start failing with auth errors.
+
+**Do not commit `.env`.** Only `.env.example` is in the repo.
+
+## Lab guidelines (required per lab)
+
+Evaluation does **not** invent a grading scale. For each subject/lab you must add:
+
+```text
+guidelines/<subject>/labs/lab-N/guidelines.md
+```
+
+Example for ТПКС:
+
+| Lab | Path |
+|-----|------|
+| ЛР1 | `guidelines/tpks/labs/lab-1/guidelines.md` |
+| ЛР2 | `guidelines/tpks/labs/lab-2/guidelines.md` |
+| ЛР3 | *(add when ready)* |
+
+`guidelines.md` should define the tasks, how to judge diagram vs code, and the numeric scale (e.g. 1/2/3 correct → 60/70/100). Held-on dates are cached under `labs/lab-N/held/` (gitignored).
+
+Without a guidelines file for that lab, the agent must stop — do not freestyle scores.
 
 ## Setup
 
@@ -8,47 +55,51 @@ Personal scripts for [ХНУРЕ ДН](https://dl.nure.ua) (Moodle), using your 
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-cp .env.example .env
-# Paste MoodleSession from DevTools → Application → Cookies → dl.nure.ua
+cp .env.example .env   # paste MoodleSession + course ids
 ```
 
-## Download ungraded lab submissions
+Teacher schedule (for group ownership + lateness):
 
-Courses come from `MOODLE_COURSE_IDS` (default both streams: `32388,32389`).
-Folders use the Moodle **course shortname** from DL (not the numeric id).
+1. Save I@S «Расписание на преподавателей» HTML into `local/schedule/`.
+2. `python -m nure_dl schedule-parse` → `local/schedule/parsed.json`.
+
+## Common commands
 
 ```bash
+# Ungraded downloads (schedule groups only)
 python -m nure_dl download --dry-run
 python -m nure_dl download
-python -m nure_dl download --course-id 32389
-python -m nure_dl download --group КІУКІ-23-1
-```
+python -m nure_dl download --group КІУКІ-24-3
+python -m nure_dl refresh              # force re-download ungraded
+python -m nure_dl clean-graded         # delete locals already graded on Moodle
 
-Each download is registered in `downloads/submissions.json` with a stable id
-(`sf-<moodle-file-id>` when available). Later grading uses that id — no DL search:
-
-```bash
 python -m nure_dl submissions
-python -m nure_dl submissions sf-3032631
+python -m nure_dl grade-status SUBMISSION_ID
+python -m nure_dl held-date SUBMISSION_ID
+python -m nure_dl grade-cap SUBMISSION_ID --score 100
+
+# Prepare dump / submit score (+ comment when anything is wrong)
+python -m nure_dl grade SUBMISSION_ID
+python -m nure_dl grade SUBMISSION_ID -s 70 -c "T2: code≠diagram"
+# After -s, local file + dump are purged unless --keep-local
 ```
 
-## Grade any lab (by submission id)
+Agent batch grading:
 
-Lab-agnostic — resolves the cached file and dumps it for evaluation (no Lab-1-specific logic):
-
-```bash
-python -m nure_dl grade local-25-1-1-x-25-1-1-docx
-# Submit Moodle gradebook score (+ optional submission comment)
-python -m nure_dl grade local-25-1-1-x-25-1-1-docx -s 70 -c "T1/T3 OK; T2 missing dataflow"
-python -m nure_dl grade local-25-1-1-x-25-1-1-docx --score 70 --comment-file notes.txt
+```text
+/evaluate lab 2 24-3
+/evaluate lab 1
+/refresh
+/clean-graded
 ```
 
-Agent evaluation: skill `.cursor/skills/nure-lab-evaluate/` + rules in `guidelines/<subject>/labs/lab-N/`.
-Before evaluating: `grade-status` (skip if already graded) → `schedule-parse` → `held-date` (gitignored cache under `labs/lab-N/held/`) → evaluate → `grade-cap` → `--score`.
-`--score` writes the numeric grade on DL; `--comment` only when something is wrong (skip if all tasks are correct).
+## Layout
 
-## Dump a report for reading
-
-```bash
-python -m nure_dl dump path/to/report.docx -o /tmp/report-dump
+```text
+src/nure_dl/          # CLI package
+guidelines/<subject>/ # per-lab evaluation rules
+downloads/            # local cache (gitignored)
+local/schedule/       # I@S HTML + parsed.json (gitignored)
+.agents/skills/       # Codex + shared skills
+.cursor/commands/     # Cursor slash commands (symlinked)
 ```
