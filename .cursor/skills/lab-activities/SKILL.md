@@ -1,0 +1,1 @@
+../../../.agents/skills/lab-activities/SKILL.md
