@@ -1,0 +1,6 @@
+Prepare Moodle assignments and group attendance for the NURE timetable. Usage is `/lab-activities [YYYY-MM-DD] [--apply]`. With no date, use today in Kyiv.
+
+1. From the project root, run `.venv/bin/python -m nure_dl lab-plan --moodle` and pass `--date YYYY-MM-DD` if requested. The CLI checks the course subject and group section, combines each pair of consecutive matching slots into one lab, and derives the lab number from the subject and group's timetable history. It checks the assignment and attendance independently.
+2. Summarize each lab number, group, Moodle target, attendance window, and which items already exist. If the user only requested a schedule preview, omit `--moodle` in step 1.
+3. When the user requests creation or passes `--apply`, run the same command with `--apply`. It recomputes the plan and creates only missing items. Verify with another `--moodle` preview. If a write fails, preview again before any retry because Moodle may have saved part of the plan.
+4. If Moodle redirects to login, ask the user to refresh `MOODLE_SESSION` in the local `.env`. If the CLI reports an ambiguous target or a conflict, identify it before creating any replacement. Report what exists and what remains.

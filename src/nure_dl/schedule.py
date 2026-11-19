@@ -83,6 +83,50 @@ class LabSession:
     pair: int | None = None
 
 
+@dataclass(frozen=True)
+class ScheduledLab:
+    subject: str
+    groups: tuple[str, ...]
+    mode: str
+    date: str
+    first_pair: int
+    last_pair: int
+    starts_at: str
+    ends_at: str
+
+
+def scheduled_labs(parsed: ParsedSchedule, day: date) -> list[ScheduledLab]:
+    """Combine adjacent timetable slots for the same scheduled lab."""
+    slots: dict[tuple[str, tuple[str, ...], str], dict[int, tuple[str, str]]] = {}
+    for entry in parsed.entries:
+        if entry.date != day.isoformat() or entry.kind != "Лб":
+            continue
+        starts_at, ends_at = entry.time.split()
+        key = entry.subject, tuple(sorted(entry.groups)), entry.mode
+        slots.setdefault(key, {})[entry.pair] = starts_at, ends_at
+
+    labs: list[ScheduledLab] = []
+    for (subject, groups, mode), pairs in slots.items():
+        remaining = sorted(pairs)
+        while remaining:
+            first = last = remaining.pop(0)
+            if remaining and remaining[0] == first + 1:
+                last = remaining.pop(0)
+            labs.append(
+                ScheduledLab(
+                    subject,
+                    groups,
+                    mode,
+                    day.isoformat(),
+                    first,
+                    last,
+                    pairs[first][0],
+                    pairs[last][1],
+                )
+            )
+    return sorted(labs, key=lambda lab: (lab.first_pair, lab.subject, lab.groups))
+
+
 def parsed_path(schedule_dir: Path | None = None) -> Path:
     return (schedule_dir or SCHEDULE_DIR) / PARSED_NAME
 

@@ -1,0 +1,1 @@
+../skills/lab-activities/command.md
