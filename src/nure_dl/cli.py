@@ -4,15 +4,19 @@ import argparse
 import json
 import sys
 from dataclasses import asdict, replace
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from loguru import logger
 
+from nure_dl.activities import apply_activities, plan_activities
 from nure_dl.clean import (
     clean_graded_submissions,
     clean_result_as_dict,
     purge_local_submission,
 )
+from nure_dl.client import MoodleClient
 from nure_dl.comments import post_submission_comment
 from nure_dl.dump import dump_report
 from nure_dl.grade import prepare_grade, print_prep, save_grade_result
@@ -30,6 +34,7 @@ from nure_dl.schedule import (
     held_path,
     lab_number_from_title,
     load_parsed_schedule,
+    scheduled_labs,
     write_parsed_schedule,
 )
 from nure_dl.service import download_ungraded
@@ -213,6 +218,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Specific HTML file (default: first *.html in schedule dir)",
     )
 
+    lab_plan = sub.add_parser(
+        "lab-plan",
+        help="Preview scheduled labs and their attendance windows",
+    )
+    lab_plan.add_argument("--date", type=date.fromisoformat, help="Date in YYYY-MM-DD")
+    lab_plan.add_argument("--schedule-dir", type=Path)
+    lab_plan.add_argument(
+        "--moodle", action="store_true", help="Check Moodle for existing activities"
+    )
+    lab_plan.add_argument(
+        "--apply", action="store_true", help="Create missing Moodle activities"
+    )
+
     held = sub.add_parser(
         "held-date",
         help="Resolve/cache when a lab was held (uses parsed schedule; before evaluate)",
@@ -321,6 +339,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_grade(args)
     elif args.command == "schedule-parse":
         raise SystemExit(_cmd_schedule_parse(args))
+    elif args.command == "lab-plan":
+        _cmd_lab_plan(args)
     elif args.command == "held-date":
         raise SystemExit(_cmd_held_date(args))
     elif args.command == "grade-status":
@@ -472,6 +492,31 @@ def _cmd_schedule_parse(args: argparse.Namespace) -> int:
     print(f"entries:  {len(parsed.entries)}")
     print(f"subjects: {', '.join(f'{k}={v}' for k, v in parsed.subjects.items())}")
     return 0
+
+
+def _cmd_lab_plan(args: argparse.Namespace) -> None:
+    day = args.date or datetime.now(ZoneInfo("Europe/Kyiv")).date()
+    schedule = load_parsed_schedule(args.schedule_dir)
+    if args.moodle or args.apply:
+        settings = load_settings()
+        with MoodleClient(settings.base_url, settings.session) as client:
+            plan = plan_activities(client, settings.course_ids, schedule, day)
+            print(
+                json.dumps(
+                    [asdict(target) for target in plan], ensure_ascii=False, indent=2
+                ),
+                flush=True,
+            )
+            if args.apply:
+                apply_activities(client, plan)
+        return
+    print(
+        json.dumps(
+            [asdict(lab) for lab in scheduled_labs(schedule, day)],
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 def _cmd_grade_status(args: argparse.Namespace) -> int:
