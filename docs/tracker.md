@@ -2,6 +2,9 @@
 
 ## Active
 
+- T-003 — Create scheduled Moodle lab activities — 🔵 — `feature/T-003-scheduled-lab-activities`
+  - Combine consecutive slots, preview targets, and skip duplicates.
+
 ## Backlog
 
 ## Completed
