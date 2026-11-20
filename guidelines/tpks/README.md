@@ -12,7 +12,7 @@ labs/lab-N/
 |--------|-----|
 | `labs/lab-1/` | Лабораторна робота 1 |
 | `labs/lab-2/` | Лабораторна робота 2 — поведінкові/структурні SV-моделі |
-| `labs/lab-3/` | Лабораторна робота 3 (add when ready) |
+| [labs/lab-3/](labs/lab-3/guidelines.md) | Лабораторна робота 3 — автомати Мура та Мілі |
 
 Schedule: put the I@S HTML in `local/schedule/`, then `python -m nure_dl schedule-parse` → `local/schedule/parsed.json`.
 Held-on: `python -m nure_dl held-date` (Lab N = N-th `ТПКС Лб` for the group). Reuse `held/*.json` if present.

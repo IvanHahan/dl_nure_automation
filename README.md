@@ -43,7 +43,7 @@ Example for ТПКС:
 |-----|------|
 | ЛР1 | `guidelines/tpks/labs/lab-1/guidelines.md` |
 | ЛР2 | `guidelines/tpks/labs/lab-2/guidelines.md` |
-| ЛР3 | *(add when ready)* |
+| ЛР3 | [grading guidelines](guidelines/tpks/labs/lab-3/guidelines.md) |
 
 `guidelines.md` should define the tasks, how to judge diagram vs code, and the numeric scale (e.g. 1/2/3 correct → 60/70/100). Held-on dates are cached under `labs/lab-N/held/` (gitignored).
 
