@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from bs4 import BeautifulSoup
+from loguru import logger
 
 from nure_dl.client import MoodleClient
 from nure_dl.comments import ensure_moodle_ids
@@ -18,6 +19,10 @@ _GRADE_VALUE_RE = re.compile(r'name="grade"[^>]*value="([^"]*)"')
 _RESUBMITTED_RE = re.compile(
     r"graded\s*[-–—]?\s*resubmitted|resubmitted", re.IGNORECASE
 )
+_FINAL_GRADE_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*/\s*\d")
+
+# assign_id -> {user_id: QueueRow}; cleared when the client context ends via new call patterns.
+_QUEUE_CACHE: dict[str, dict[str, _QueueRow]] = {}
 
 
 @dataclass(frozen=True)
@@ -45,30 +50,52 @@ def check_grade_status(
     Students who resubmit after a grade stay ``graded=True`` but appear again in
     Moodle's ``requiregrading`` queue (status ``Graded - resubmitted``). Those
     must be treated as ``needs_grading=True`` so evaluate/download keep them.
+
+    Prefer the requiregrading table (one fetch per assignment, cached) so a full
+    evaluate batch does not hit the grade page for every student.
     """
     root = output_dir if output_dir is not None else settings.output_dir
     with MoodleClient(settings.base_url, settings.session) as client:
         assign_id, user_id = ensure_moodle_ids(client, settings, rec, root)
-        html = client.get_text(
-            f"/mod/assign/view.php?id={assign_id}&action=grade&userid={user_id}"
-        )
-        grade = _read_grade(html)
-        queue = _requiregrading_row(client, settings.base_url, assign_id, user_id)
+        queue_map = _requiregrading_index(client, settings.base_url, assign_id)
+        queue = queue_map.get(user_id)
 
-    needs_grading = queue is not None
-    resubmitted = bool(queue and queue.resubmitted)
-    return GradeStatus(
-        graded=grade is not None,
-        needs_grading=needs_grading,
-        resubmitted=resubmitted,
-        grade=grade,
-        assign_id=assign_id,
-        moodle_user_id=user_id,
-        student_name=rec.student_name,
-        lab_title=rec.lab_title,
-        group=rec.group,
-        submission_id=rec.id,
-    )
+        if queue is not None:
+            grade = queue.grade
+            if grade is None:
+                grade = _grade_from_grade_page(client, assign_id, user_id)
+            return GradeStatus(
+                graded=grade is not None or queue.resubmitted,
+                needs_grading=True,
+                resubmitted=queue.resubmitted,
+                grade=grade,
+                assign_id=assign_id,
+                moodle_user_id=user_id,
+                student_name=rec.student_name,
+                lab_title=rec.lab_title,
+                group=rec.group,
+                submission_id=rec.id,
+            )
+
+        # Not in requiregrading → nothing left to grade for evaluate/clean.
+        grade = _grade_from_grade_page(client, assign_id, user_id)
+        return GradeStatus(
+            graded=grade is not None,
+            needs_grading=False,
+            resubmitted=False,
+            grade=grade,
+            assign_id=assign_id,
+            moodle_user_id=user_id,
+            student_name=rec.student_name,
+            lab_title=rec.lab_title,
+            group=rec.group,
+            submission_id=rec.id,
+        )
+
+
+def clear_grade_status_cache() -> None:
+    """Drop cached requiregrading tables (call between evaluate batches if needed)."""
+    _QUEUE_CACHE.clear()
 
 
 def grade_status_as_dict(status: GradeStatus) -> dict:
@@ -78,15 +105,19 @@ def grade_status_as_dict(status: GradeStatus) -> dict:
 @dataclass(frozen=True)
 class _QueueRow:
     resubmitted: bool
+    grade: str | None = None
 
 
-def _requiregrading_row(
+def _requiregrading_index(
     client: MoodleClient,
     base_url: str,
     assign_id: str,
-    user_id: str,
-) -> _QueueRow | None:
-    """Return the student's row in the requiregrading table, if present."""
+) -> dict[str, _QueueRow]:
+    cached = _QUEUE_CACHE.get(assign_id)
+    if cached is not None:
+        return cached
+
+    rows: dict[str, _QueueRow] = {}
     page = 0
     while True:
         html = client.get_text(grading_url(base_url, assign_id, page=page))
@@ -94,16 +125,42 @@ def _requiregrading_row(
         for tr in soup.select("table.generaltable tr, table.flexible tr"):
             if not tr.select("td"):
                 continue
-            if _row_user_id(tr) != user_id:
+            user_id = _row_user_id(tr)
+            if not user_id:
                 continue
             status = tr.select_one("td.status")
             text = status.get_text(" ", strip=True) if status is not None else ""
-            return _QueueRow(resubmitted=bool(_RESUBMITTED_RE.search(text)))
+            grade = _row_final_grade(tr)
+            rows[user_id] = _QueueRow(
+                resubmitted=bool(_RESUBMITTED_RE.search(text)),
+                grade=grade,
+            )
         if not has_next_page(html):
-            return None
+            break
         page += 1
         if page > 50:
-            return None
+            break
+
+    logger.debug(
+        "Cached requiregrading for assign {}: {} student(s)", assign_id, len(rows)
+    )
+    _QUEUE_CACHE[assign_id] = rows
+    return rows
+
+
+def _grade_from_grade_page(
+    client: MoodleClient, assign_id: str, user_id: str
+) -> str | None:
+    try:
+        html = client.get_text(
+            f"/mod/assign/view.php?id={assign_id}&action=grade&userid={user_id}"
+        )
+    except Exception as exc:  # noqa: BLE001 — status check should degrade softly
+        logger.warning(
+            "Grade page unavailable for assign={} user={}: {}", assign_id, user_id, exc
+        )
+        return None
+    return _read_grade(html)
 
 
 def _row_user_id(tr) -> str | None:
@@ -119,6 +176,16 @@ def _row_user_id(tr) -> str | None:
         match = re.fullmatch(r"user(\d+)", cls)
         if match:
             return match.group(1)
+    return None
+
+
+def _row_final_grade(tr) -> str | None:
+    # Last cells often hold "0.00 / 100.00" (Final grade).
+    for td in reversed(tr.select("td")):
+        text = td.get_text(" ", strip=True)
+        match = _FINAL_GRADE_RE.search(text)
+        if match:
+            return match.group(1).replace(",", ".")
     return None
 
 

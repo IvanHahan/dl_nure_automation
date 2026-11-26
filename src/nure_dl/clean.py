@@ -60,13 +60,9 @@ def clean_graded_submissions(
             why = "resubmitted" if status.resubmitted else "needs grading"
             logger.debug("Keep {} {} ({})", why, rec.id, rec.student_name)
             continue
-        if not status.graded:
-            skipped += 1
-            logger.debug("Keep ungraded {} ({})", rec.id, rec.student_name)
-            continue
         graded += 1
         logger.info(
-            "Graded on Moodle ({}): {} — {} / {}",
+            "Done on Moodle (grade={}): {} — {} / {}",
             status.grade,
             rec.id,
             rec.student_name,

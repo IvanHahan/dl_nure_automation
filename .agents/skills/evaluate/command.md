@@ -62,7 +62,9 @@ For each id, follow **`nure-lab-evaluate`** end-to-end:
 
 Do not stop the whole batch on one failure or one off-schedule group: record the skip/error, continue, report at the end.
 
-Large batches: process sequentially (Moodle + dumps); you may parallelize read-only `grade-status` checks first to shrink the list.
+Large batches: process sequentially (Moodle + dumps). After a big `refresh`, dl.nure.ua may briefly return **405/429** — the CLI retries with backoff; if a whole batch fails, wait a minute and re-run `/evaluate` (locals stay until graded). Do not treat a transient 405 as “skip forever”.
+
+Clear per-assignment requiregrading cache between separate evaluate runs if you re-refresh mid-session (`python -c 'from nure_dl.grade_status import clear_grade_status_cache; clear_grade_status_cache()'`), or just start a new process.
 
 ## Final report
 
