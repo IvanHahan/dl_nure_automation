@@ -60,7 +60,7 @@ If both lab and group are missing and it is not a submission id, ask — do not 
 
 For each id, follow **`nure-lab-evaluate`** end-to-end:
 
-1. `grade-status` — skip if graded unless `regrade`.
+1. `grade-status` — skip only when `needs_grading: false` (unless `regrade`). Resubmits have `needs_grading: true` even if an old grade exists — evaluate them.
 2. Schedule / `held-date` — if the group is off-schedule or held-date is missing → **skip** (`skipped not on schedule`); do not ask the user.
 3. Dump / prepare via `grade SUBMISSION_ID`.
 4. Load `guidelines/<subject>/labs/lab-N/guidelines.md` — stop if missing.

@@ -8,7 +8,12 @@ from loguru import logger
 from nure_dl.client import MoodleClient
 from nure_dl.course import discover_labs, resolve_course_name
 from nure_dl.grading import grading_url, has_next_page, parse_ungraded_files
-from nure_dl.index import register_submission
+from nure_dl.index import (
+    load_index,
+    make_submission_id,
+    register_submission,
+    save_index,
+)
 from nure_dl.models import LabAssignment, SubmissionFile
 from nure_dl.schedule import group_on_schedule, schedule_group_names
 from nure_dl.settings import Settings
@@ -135,19 +140,79 @@ def download_ungraded(
                         downloaded += 1
                         continue
                     exists = dest.exists() and dest.stat().st_size > 0
-                    if exists and not force:
+                    stale = _is_stale_local(settings.output_dir, lab, item, dest)
+                    if exists and not force and not stale:
                         logger.debug("Skip existing {}", dest)
                     else:
                         client.download(item.url, dest)
                         logger.info(
                             "{} {}",
-                            "Re-downloaded" if exists else "Downloaded",
+                            "Re-downloaded" if exists or stale else "Downloaded",
                             dest,
                         )
                         downloaded += 1
+                    _drop_stale_index_entries(settings.output_dir, lab, item, dest)
                     rec = register_submission(settings.output_dir, lab, item, dest)
                     logger.info("Indexed {} → {}", rec.id, dest)
     return downloaded
+
+
+def _is_stale_local(
+    output_dir: Path,
+    lab: LabAssignment,
+    item: SubmissionFile,
+    dest: Path,
+) -> bool:
+    """True when a local file exists but Moodle has a newer submission file id."""
+    if not item.moodle_file_id:
+        return False
+    dest = dest.resolve()
+    for rec in load_index(output_dir).values():
+        same_path = Path(rec.path).resolve() == dest
+        same_student = (
+            rec.assign_id == lab.assign_id
+            and bool(rec.moodle_user_id)
+            and rec.moodle_user_id == item.moodle_user_id
+        )
+        if not (same_path or same_student):
+            continue
+        if rec.moodle_file_id and rec.moodle_file_id != item.moodle_file_id:
+            logger.info(
+                "Resubmit detected for {} (file {} → {})",
+                item.student_name,
+                rec.moodle_file_id,
+                item.moodle_file_id,
+            )
+            return True
+    return False
+
+
+def _drop_stale_index_entries(
+    output_dir: Path,
+    lab: LabAssignment,
+    item: SubmissionFile,
+    dest: Path,
+) -> None:
+    """Remove older index ids for the same student/path after a resubmit."""
+    new_id = make_submission_id(lab, item)
+    records = load_index(output_dir)
+    dest = dest.resolve()
+    removed = False
+    for sid, rec in list(records.items()):
+        if sid == new_id:
+            continue
+        same_path = Path(rec.path).resolve() == dest
+        same_student = (
+            rec.assign_id == lab.assign_id
+            and bool(rec.moodle_user_id)
+            and rec.moodle_user_id == item.moodle_user_id
+        )
+        if same_path or same_student:
+            records.pop(sid)
+            removed = True
+            logger.info("Dropped stale index entry {}", sid)
+    if removed:
+        save_index(output_dir, records)
 
 
 def _destination(root: Path, lab: LabAssignment, item: SubmissionFile) -> Path:

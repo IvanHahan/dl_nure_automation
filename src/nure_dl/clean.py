@@ -55,6 +55,11 @@ def clean_graded_submissions(
             errors += 1
             logger.error("grade-status failed for {}: {}", rec.id, exc)
             continue
+        if status.needs_grading:
+            skipped += 1
+            why = "resubmitted" if status.resubmitted else "needs grading"
+            logger.debug("Keep {} {} ({})", why, rec.id, rec.student_name)
+            continue
         if not status.graded:
             skipped += 1
             logger.debug("Keep ungraded {} ({})", rec.id, rec.student_name)
