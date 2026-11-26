@@ -1,8 +1,10 @@
-Evaluate and grade ХНУРЕ DL lab submissions for a chosen scope, then write scores (and comments when needed) to Moodle.
+Evaluate and grade ХНУРЕ DL lab submissions, then write scores (and comments when needed) to Moodle.
 
 Usage: `/evaluate $ARGUMENTS`
 
 This command is the **driver**; `nure-lab-evaluate` is the **SSOT** for per-submission steps (grade-status → held-date → dump → guidelines → score → grade-cap → Moodle). Load and follow that skill for every id you grade.
+
+Invoking `/evaluate` (with or without args) is confirmation to run the resolved pipeline, including Moodle downloads and grades.
 
 ## Resolve scope from $ARGUMENTS
 
@@ -10,51 +12,43 @@ Treat tokens case-insensitively. Ukrainian aliases (`лр`, `лаборатор�
 
 | Pattern | Meaning |
 |---------|---------|
-| empty | List indexed labs/groups briefly and ask what to evaluate (do not grade yet). |
-| `sf-…` / `local-…` | That single submission id. |
-| `lab N` / `лр N` / `лрN` | Lab **N** for **all** groups that have indexed submissions. |
-| `lab N <group>` | Lab **N** for groups whose name contains `<group>` (e.g. `24-3`, `КІУКІ-24-3`). |
-| `<group>` alone | **All** labs for that group substring. |
-| `lab N all` | Same as `lab N` (all groups). |
+| **empty (default)** | **Full pipeline** — refresh the requiregrading queue for schedule groups, then grade every lab that has guidelines (see below). |
+| `sf-…` / `local-…` | That single submission id (no refresh unless the id is missing locally). |
+| `lab N` / `лр N` / `лрN` | Refresh, then lab **N** for all on-schedule groups (guidelines required). |
+| `lab N <group>` | Refresh that group (optional narrow download), then lab **N** for matching groups. |
+| `<group>` alone | Refresh that group, then **all labs with guidelines** for that group. |
+| `lab N all` | Same as `lab N`. |
 | `tpks …` | Subject override (default **tpks**). |
-| `regrade` / `--regrade` | Also process submissions already graded on Moodle (normally skip). |
+| `regrade` / `--regrade` | Also process submissions with `needs_grading: false`. |
+| `ask` / `--ask` | Only list indexed labs/groups and ask — do **not** download or grade. |
 
 Examples:
 
+- `/evaluate` — full pipeline (default)
 - `/evaluate lab 2 24-3`
 - `/evaluate лр1 КІУКІ-24-1`
-- `/evaluate lab 2`
 - `/evaluate 24-3`
-- `/evaluate local-24-3-2-x-2-24-3-docx`
-- `/evaluate lab 1 24-3 regrade`
+- `/evaluate ask`
 
-If both lab and group are missing and it is not a submission id, ask — do not invent a scope.
+## Default full pipeline (empty args)
 
-## Build the work list
+Run in order:
 
-1. Ensure the index exists:
+1. **Schedule** — ensure `local/schedule/parsed.json` (`schedule-parse` if missing).
+2. **Clean** — `python -m nure_dl clean-graded` (drop locals that are fully done on Moodle; keeps resubmits).
+3. **Refresh** — `python -m nure_dl refresh` (force re-download Moodle requiregrading for **schedule groups only**: new + Graded–resubmitted).
+4. **Labs with guidelines** — discover `guidelines/<subject>/labs/lab-N/guidelines.md`. Only those lab numbers are graded; labs without a file are skipped (`missing guidelines`).
+5. **Work list** — from `submissions --json`, keep rows whose group is on the schedule and whose lab number has guidelines. Dedupe docx/pdf (prefer `.docx`).
+6. **Grade each id** via `nure-lab-evaluate` (below). Successful `--score` purges the local file + dump.
 
-```bash
-.venv/bin/python -m nure_dl submissions
-```
+Print a short plan (labs, group count, submission count) before grading, then proceed without asking.
 
-2. Filter to the resolved scope (match `lab_title` for lab number; substring-match `group`). Prefer machine-readable filter:
+## Scoped runs (non-empty args)
 
-```bash
-.venv/bin/python -m nure_dl submissions --json
-```
-
-3. Drop every submission whose **group is not on the teacher schedule** (`local/schedule/parsed.json`). Same rule as `download` / `refresh`. Note them as `skipped not on schedule`. **Never ask the user for a held-on date** for those groups — ignore and move on.
-
-4. If the remaining list is empty: say so. Optionally run download for an on-schedule group, then re-list — do not invent ids.
-
-```bash
-.venv/bin/python -m nure_dl download --group GROUP_SUBSTRING
-```
-
-5. Deduplicate: one file per student when both `.docx` and `.pdf` exist for the same person/lab — prefer `.docx`, else the newest/largest; note skips in the summary.
-
-6. Print the planned list (id, student, group, lab) and proceed (invoking `/evaluate` is confirmation to grade that scope).
+1. Ensure schedule is parsed.
+2. Refresh when the scope is a lab and/or group (same as default, but you may pass `--group` to `refresh` / `download` when a group filter is set). Skip refresh for a single known `sf-` / `local-` id that is already indexed.
+3. Build the work list from the index, filtered to the scope, then apply schedule + guidelines filters as above.
+4. Grade each remaining id.
 
 ## Evaluate each submission
 
@@ -63,8 +57,8 @@ For each id, follow **`nure-lab-evaluate`** end-to-end:
 1. `grade-status` — skip only when `needs_grading: false` (unless `regrade`). Resubmits have `needs_grading: true` even if an old grade exists — evaluate them.
 2. Schedule / `held-date` — if the group is off-schedule or held-date is missing → **skip** (`skipped not on schedule`); do not ask the user.
 3. Dump / prepare via `grade SUBMISSION_ID`.
-4. Load `guidelines/<subject>/labs/lab-N/guidelines.md` — stop if missing.
-5. Judge tasks → task score → `grade-cap` → submit Moodle `--score` (+ `-c` when anything incorrect). Successful `--score` auto-purges the local file + dump (`local_purged`); do not pass `--keep-local` in normal batches.
+4. Load `guidelines/<subject>/labs/lab-N/guidelines.md` — skip if missing (`missing guidelines`).
+5. Judge tasks → task score → `grade-cap` (first submission date) → Moodle `--score` (+ `-c` when anything incorrect). Successful `--score` auto-purges locals (`local_purged`); do not pass `--keep-local` in normal batches.
 
 Do not stop the whole batch on one failure or one off-schedule group: record the skip/error, continue, report at the end.
 
@@ -73,8 +67,9 @@ Large batches: process sequentially (Moodle + dumps); you may parallelize read-o
 ## Final report
 
 ```
-Scope: subject=… lab=… group=… (or all) regrade=yes|no
-Planned: N | Skipped graded: K | Skipped not on schedule: S | Evaluated: M | Failed: F
+Scope: subject=… pipeline=full|lab|group|id regrade=yes|no
+Refreshed: … | Guidelines labs: 1,2,3
+Planned: N | Skipped done: K | Skipped not on schedule: S | Skipped no guidelines: G | Evaluated: M | Failed: F
 
 id | student | group | lab | task_score | final | DL | note
 …  | …       | …     | …   | …          | …     | …  | …
@@ -83,4 +78,4 @@ Failures:
 - id — reason
 ```
 
-Keep notes short (`skipped graded`, `skipped not on schedule`, `missing guidelines`, `missing diagram`, …).
+Keep notes short (`skipped done`, `skipped not on schedule`, `missing guidelines`, `missing diagram`, `resubmitted`, …).

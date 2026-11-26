@@ -1,9 +1,10 @@
 ---
 name: evaluate
 description: >-
-  Evaluate and grade ХНУРЕ DL lab submissions for a group, a lab, a lab across
-  all groups, or a single submission id. Use when asked to run /evaluate, or to
-  grade/evaluate a group, lab, ЛР, or batch of ТПКС submissions.
+  Full ХНУРЕ DL grading pipeline by default: refresh requiregrading (new +
+  resubmits) for schedule groups, grade every lab that has guidelines, purge
+  locals after Moodle score. Also supports scoped /evaluate lab N, group, or
+  submission id. Use when asked to run /evaluate or to grade/evaluate labs.
 disable-model-invocation: true
 ---
 

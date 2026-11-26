@@ -12,6 +12,8 @@ Automates grading workflow for [ХНУРЕ ДН](https://dl.nure.ua) (Moodle): d
 
 Agent entry points: `/evaluate`, `/refresh`, `/clean-graded` (see `.agents/skills/` and `.cursor/commands/`). Per-submission procedure: `nure-lab-evaluate`.
 
+`/evaluate` with **no args** runs the full pipeline: clean-graded → refresh (schedule groups, new + resubmits) → grade every lab that has `guidelines/<subject>/labs/lab-N/guidelines.md` → purge locals after each Moodle score. Pass `lab N`, a group, or an id to narrow; `ask` only lists without grading.
+
 ## Moodle session (required)
 
 Copy the session cookie from the browser into `.env`:
@@ -87,10 +89,10 @@ python -m nure_dl grade SUBMISSION_ID -s 70 -c "T2: code≠diagram"
 Agent batch grading:
 
 ```text
-/evaluate lab 2 24-3
-/evaluate lab 1
-/refresh
-/clean-graded
+/evaluate              # full pipeline (default)
+/evaluate lab 2 24-3   # one lab + group
+/evaluate 24-3
+/evaluate ask          # list only
 ```
 
 ## Layout
