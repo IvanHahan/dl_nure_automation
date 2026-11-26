@@ -6,8 +6,8 @@ Automates grading workflow for [ХНУРЕ ДН](https://dl.nure.ua) (Moodle): d
 
 1. **Auth** — CLI uses your browser `MoodleSession` cookie (no password login).
 2. **Schedule** — your I@S teacher schedule defines which groups you own. Downloads and evaluation skip other teachers’ groups.
-3. **Download / refresh** — pulls only **ungraded** submissions for on-schedule groups into `downloads/` and indexes them in `submissions.json`.
-4. **Evaluate** — an agent (Cursor/Codex skills) dumps each report, checks it against lab guidelines, applies a lateness cap from the schedule, and posts the Moodle grade.
+3. **Download / refresh** — pulls Moodle’s **requiregrading** queue for on-schedule groups (never graded **and** Graded–resubmitted). Reuploads get a new file id and replace the local copy.
+4. **Evaluate** — an agent (Cursor/Codex skills) dumps each report, checks it against lab guidelines, applies a lateness cap from the schedule, and posts the Moodle grade. Skip only when `needs_grading` is false (resubmits are kept). Lateness uses the **first** submission date, so a reupload does not worsen the cap.
 5. **Cleanup** — after a successful Moodle `--score`, the local file and dump are deleted (index updated). Use `/clean-graded` to purge leftovers that are already graded on DL.
 
 Agent entry points: `/evaluate`, `/refresh`, `/clean-graded` (see `.agents/skills/` and `.cursor/commands/`). Per-submission procedure: `nure-lab-evaluate`.

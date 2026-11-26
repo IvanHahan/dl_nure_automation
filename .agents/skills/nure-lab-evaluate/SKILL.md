@@ -16,17 +16,19 @@ load the matching file before scoring. Always finish by writing the grade to DL
 Batch / group / lab scope: use the `/evaluate` command (`evaluate` skill) to resolve
 ids, then run this skill per submission.
 
-## 0. Already graded? (before anything else)
+## 0. Still needs grading? (before anything else)
 
-**For every submission, check Moodle first.** If already graded, **skip** — do not dump, re-score, or overwrite unless the user explicitly asks to regrade.
+**For every submission, check Moodle first.** Skip only when it no longer needs grading.
 
 ```bash
 .venv/bin/python -m nure_dl grade-status SUBMISSION_ID
-# graded: true  → skip this submission
-# graded: false → continue
+# needs_grading: false → skip (fully done on Moodle)
+# needs_grading: true  → continue (never graded, or Graded - resubmitted)
 ```
 
-When evaluating a group, run `grade-status` per id and only continue for `graded: false`.
+Resubmits keep an old grade (`graded: true`) but Moodle puts them back in the requiregrading queue (`resubmitted: true`, `needs_grading: true`) — **evaluate them**, do not skip.
+
+When evaluating a group, run `grade-status` per id and only continue for `needs_grading: true` (or `regrade`).
 
 ## 1. Schedule ownership + lab held-on date
 
@@ -118,6 +120,8 @@ Rules (calendar days after held-on):
 | ≤ 2 weeks (≤ 14 days) | 100 |
 | 2–6 weeks (15–42 days) | 90 |
 | later (> 42 days) | 80 |
+
+**Resubmits:** lateness uses the **first** Moodle submission date (course logs), not the latest reupload — fixing a grade must not worsen the cap. `grade-cap` reports `submitted_source=first_submission_log` when that worked.
 
 Use `final_score` from the command (`min(task_score, max_grade)`). Do not submit a higher Moodle score.
 

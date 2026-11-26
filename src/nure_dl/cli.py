@@ -534,8 +534,10 @@ def _cmd_grade_status(args: argparse.Namespace) -> int:
         print(f"student:       {status.student_name}")
         print(f"lab:           {status.lab_title} ({status.group})")
         print(f"graded:        {str(status.graded).lower()}")
+        print(f"needs_grading: {str(status.needs_grading).lower()}")
+        print(f"resubmitted:   {str(status.resubmitted).lower()}")
         print(f"grade:         {status.grade if status.grade is not None else ''}")
-    # Exit 0 if graded (skip), 2 if not graded — easy for scripts; always 0 for interactive
+    # Exit 0 always for interactive use; scripts should read needs_grading
     return 0
 
 
@@ -568,6 +570,7 @@ def _cmd_grade_cap(args: argparse.Namespace) -> int:
     else:
         print(f"held_on:      {cap.held_on}")
         print(f"submitted_on: {cap.submitted_on}")
+        print(f"submitted_source: {cap.submitted_source}")
         print(f"days_after:   {cap.days_after}")
         print(f"band:         {cap.band}")
         print(f"max_grade:    {cap.max_grade}")
